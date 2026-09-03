@@ -14,11 +14,11 @@ import {
   Settings,
   PanelLeft,
   LogOut,
-  ChevronDown,
   Sun,
   Moon,
   X,
   LifeBuoy,
+  MapPin,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../contexts/AuthContext';
@@ -162,11 +162,16 @@ export function DashboardLayout() {
           >
             <PanelLeft size={20} />
           </button>
-          {isSuperAdmin ? (
-            <SiteSwitcher sites={sites ?? []} />
-          ) : (
-            <div className="text-sm font-medium text-slate-700 dark:text-slate-300">Site : {user?.site?.name}</div>
-          )}
+          <div className="ml-auto min-w-0">
+            {isSuperAdmin ? (
+              <SiteSwitcher sites={sites ?? []} />
+            ) : (
+              <div className="flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                <MapPin size={14} className="text-orange-500" />
+                {user?.site?.name}
+              </div>
+            )}
+          </div>
         </header>
 
         <main className="flex-1 p-4 lg:p-6">
@@ -179,43 +184,27 @@ export function DashboardLayout() {
 
 function SiteSwitcher({ sites }: { sites: Site[] }) {
   const { siteId, setSiteId } = useSiteFilter();
-  const [open, setOpen] = useState(false);
-  const current = sites.find((s) => s.id === siteId);
+
+  function segmentClass(active: boolean) {
+    return clsx(
+      'shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-sm font-medium transition-colors',
+      active
+        ? 'bg-white text-slate-900 shadow-sm dark:bg-white dark:text-slate-900'
+        : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200',
+    );
+  }
 
   return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-800 px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-      >
-        {current ? current.name : 'Tous les sites'}
-        <ChevronDown size={14} />
+    <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-full bg-slate-100 py-1 pl-2 pr-1 dark:bg-slate-800">
+      <MapPin size={14} className="mr-0.5 shrink-0 text-orange-500" />
+      <button onClick={() => setSiteId(null)} className={segmentClass(siteId === null)}>
+        Tous
       </button>
-      {open && (
-        <div className="absolute z-20 mt-1 w-48 rounded-lg border border-slate-200 dark:border-slate-800 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
-          <button
-            className="block w-full px-3 py-1.5 text-left text-sm hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700"
-            onClick={() => {
-              setSiteId(null);
-              setOpen(false);
-            }}
-          >
-            Tous les sites
-          </button>
-          {sites.map((site) => (
-            <button
-              key={site.id}
-              className="block w-full px-3 py-1.5 text-left text-sm hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700"
-              onClick={() => {
-                setSiteId(site.id);
-                setOpen(false);
-              }}
-            >
-              {site.name}
-            </button>
-          ))}
-        </div>
-      )}
+      {sites.map((site) => (
+        <button key={site.id} onClick={() => setSiteId(site.id)} className={segmentClass(siteId === site.id)}>
+          {site.name}
+        </button>
+      ))}
     </div>
   );
 }
