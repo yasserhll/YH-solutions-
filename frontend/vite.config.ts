@@ -8,7 +8,12 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: 'prompt',
+      // A stale service worker is worse than a mid-session reload here: this
+      // app is edited constantly, and 'prompt' left a fix sitting inert on
+      // an already-installed device until someone happened to notice and
+      // click an update toast. 'autoUpdate' activates a new worker and
+      // reloads automatically as soon as one is available.
+      registerType: 'autoUpdate',
       injectRegister: null,
       includeAssets: ['favicon.jpg', 'icons/apple-touch-icon.png'],
       devOptions: {

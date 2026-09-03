@@ -1,13 +1,18 @@
 import { useEffect, useState } from 'react';
 import { registerSW } from 'virtual:pwa-register';
 import toast from 'react-hot-toast';
-import { WifiOff, RefreshCw, DownloadCloud } from 'lucide-react';
+import { WifiOff, DownloadCloud } from 'lucide-react';
 
 /**
  * Registers the service worker and surfaces the two things a user actually
  * needs to know about a PWA: "you're offline, your changes will sync later"
- * and "a new version is ready, reload when convenient". Mount once, near
- * the root — has no visual footprint beyond toasts/the offline banner.
+ * and "you're now on the latest version". Mount once, near the root — has
+ * no visual footprint beyond toasts/the offline banner.
+ *
+ * Updates are applied automatically (no "click to update" prompt): this app
+ * changes constantly, and leaving a fix sitting inert on an already-open tab
+ * or an already-installed device until someone notices a toast is worse than
+ * an occasional automatic reload. See onNeedRefresh below.
  */
 export function PwaStatus() {
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -16,32 +21,24 @@ export function PwaStatus() {
     const updateSW = registerSW({
       immediate: true,
       onNeedRefresh() {
-        toast(
-          (t) => (
-            <div className="flex items-center gap-3">
-              <span className="text-sm">Nouvelle version disponible.</span>
-              <button
-                onClick={() => {
-                  toast.dismiss(t.id);
-                  updateSW(true);
-                }}
-                className="flex items-center gap-1 rounded-md bg-slate-900 px-2 py-1 text-xs font-medium text-white dark:bg-white dark:text-slate-900"
-              >
-                <RefreshCw size={12} /> Mettre à jour
-              </button>
-            </div>
-          ),
-          { duration: Infinity, id: 'pwa-update' }
-        );
+        toast.loading('Mise à jour de l\'application...', { id: 'pwa-update', duration: 2000 });
+        updateSW(true);
       },
       onOfflineReady() {
-        toast.success("Application prête pour un usage hors connexion.", {
+        toast.success('Application prête pour un usage hors connexion.', {
           icon: <DownloadCloud size={16} />,
           duration: 4000,
         });
       },
       onRegisterError(error) {
         console.error('Service worker registration failed', error);
+      },
+      onRegisteredSW(_url, registration) {
+        // A long-lived tab (this is the kind of app people leave open all
+        // day) otherwise only checks for a new version on navigation —
+        // poll too, so a fix ships without anyone needing to close the tab.
+        if (!registration) return;
+        setInterval(() => registration.update(), 30 * 60 * 1000);
       },
     });
 
