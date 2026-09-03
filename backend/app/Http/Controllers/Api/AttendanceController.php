@@ -82,6 +82,7 @@ class AttendanceController extends Controller
         $data['created_by'] = $request->user()->id;
         if ($data['status'] === 'present') {
             $data['absence_cause'] = null;
+            $data['description'] = null;
         }
 
         $attendance = Attendance::updateOrCreate(
@@ -132,6 +133,7 @@ class AttendanceController extends Controller
         $data = $request->validated();
         if ($data['status'] === 'present') {
             $data['absence_cause'] = null;
+            $data['description'] = null;
         }
         $attendance->update($data);
 

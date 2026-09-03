@@ -47,29 +47,20 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
           {
-            // Reference data + lists: show the last-known answer instantly,
-            // then quietly refresh from the network for next time.
-            urlPattern: ({ url, request }) =>
-              request.method === 'GET' &&
-              url.pathname.startsWith('/api/') &&
-              !url.pathname.startsWith('/api/dashboard'),
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'api-get-cache',
-              expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 14 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            // The dashboard is the "what's the current state of everything"
-            // view — prefer a fresh network answer, but fall back to the
-            // last cached one within a few seconds if offline/slow.
-            urlPattern: ({ url, request }) => request.method === 'GET' && url.pathname.startsWith('/api/dashboard'),
+            // Every GET goes to the network first — this app is edited
+            // constantly (mark present/absent, add a leave, etc.) and a
+            // refetch right after a mutation must show the new value, not a
+            // stale cached one (StaleWhileRevalidate would return the old
+            // snapshot immediately and only update the cache for *next*
+            // time, which looked like "nothing happened until I refresh").
+            // The cache is only a fallback for when the network genuinely
+            // fails — i.e. actually offline — which is what this is for.
+            urlPattern: ({ url, request }) => request.method === 'GET' && url.pathname.startsWith('/api/'),
             handler: 'NetworkFirst',
             options: {
-              cacheName: 'api-dashboard-cache',
+              cacheName: 'api-get-cache',
               networkTimeoutSeconds: 4,
-              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 14 },
+              expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 14 },
               cacheableResponse: { statuses: [0, 200] },
             },
           },

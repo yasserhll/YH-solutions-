@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { UserX } from 'lucide-react';
+import { UserX, Pencil } from 'lucide-react';
 import { api, apiErrorMessage } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
 import type { AbsenceCause, DailyAttendanceRow } from '../types';
@@ -126,9 +126,22 @@ export default function AttendancePage() {
                         <UserX size={14} /> Marquer absent
                       </Button>
                     ) : (
-                      <Button size="sm" variant="secondary" onClick={() => markPresent.mutate(row.employee_id)}>
-                        Marquer présent
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button size="sm" variant="secondary" onClick={() => markPresent.mutate(row.employee_id)}>
+                          Marquer présent
+                        </Button>
+                        {/* Correcting the cause (e.g. "non autorisée" → "maladie"
+                            once a medical justification arrives) shouldn't
+                            require marking present then absent again. */}
+                        <button
+                          onClick={() => setAbsenceTarget(row)}
+                          className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                          aria-label="Modifier la cause de l'absence"
+                          title="Modifier la cause de l'absence"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -165,9 +178,13 @@ function AbsenceModal({
   onSaved: () => void;
 }) {
   const queryClient = useQueryClient();
-  const [cause, setCause] = useState<AbsenceCause>('maladie');
-  const [description, setDescription] = useState('');
   const isBulk = Array.isArray(target);
+  // Editing an already-absent row (e.g. correcting "non autorisée" to
+  // "maladie" once a medical note arrives) pre-fills the current values
+  // instead of resetting to the defaults.
+  const isCorrection = !isBulk && target.status === 'absent';
+  const [cause, setCause] = useState<AbsenceCause>(isCorrection && target.absence_cause ? target.absence_cause : 'maladie');
+  const [description, setDescription] = useState(isCorrection ? (target.description ?? '') : '');
 
   const mutation = useMutation({
     mutationFn: async (): Promise<unknown> => {
@@ -190,14 +207,14 @@ function AbsenceModal({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['attendance-daily'] });
-      toast.success('Absence enregistrée.');
+      toast.success(isCorrection ? 'Absence mise à jour.' : 'Absence enregistrée.');
       onSaved();
     },
     onError: (err) => toast.error(apiErrorMessage(err)),
   });
 
   return (
-    <Modal open onClose={onClose} title="Marquer absent" size="sm">
+    <Modal open onClose={onClose} title={isCorrection ? "Modifier l'absence" : 'Marquer absent'} size="sm">
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -225,7 +242,7 @@ function AbsenceModal({
             Annuler
           </Button>
           <Button type="submit" variant="danger" disabled={mutation.isPending}>
-            Confirmer l'absence
+            {isCorrection ? 'Enregistrer' : "Confirmer l'absence"}
           </Button>
         </div>
       </form>
