@@ -32,7 +32,6 @@ class CashAccountController extends Controller
 
         $data = $request->validate([
             'initial_balance' => ['required', 'numeric'],
-            'allow_negative_balance' => ['sometimes', 'boolean'],
         ]);
 
         $account->update($data);

@@ -19,6 +19,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->api(prepend: [
             \Illuminate\Http\Middleware\HandleCors::class,
         ]);
+        $middleware->api(append: [
+            \App\Http\Middleware\PreventApiCaching::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

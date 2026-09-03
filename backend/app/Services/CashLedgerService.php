@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\CashAccount;
 use App\Models\CashTransaction;
 use Illuminate\Support\Facades\DB;
-use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
  * Reproduces the ledger logic found in the reference Excel workbook:
@@ -13,21 +12,18 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
  * running total ordered by date. Because a transaction can be edited/inserted
  * anywhere in the timeline (not just appended), every write recalculates the
  * running_balance of all transactions on the account from that point forward.
+ *
+ * A declared expense is never blocked for exceeding the available balance —
+ * it's recorded as-is and the running balance simply goes negative until the
+ * SuperAdmin records an "entry" (recharge). Rejecting the write would stop a
+ * responsable from declaring a real purchase just because the caisse hasn't
+ * been topped up yet, which is worse than a temporarily negative number.
  */
 class CashLedgerService
 {
     public function create(CashAccount $account, array $data): CashTransaction
     {
         return DB::transaction(function () use ($account, $data) {
-            $signedAmount = $data['type'] === 'expense' ? -abs($data['amount']) : abs($data['amount']);
-
-            if ($data['type'] === 'expense' && ! $account->allow_negative_balance) {
-                $balanceBeforeThisDate = $this->balanceBefore($account, $data['date']);
-                if (bcadd($balanceBeforeThisDate, $signedAmount, 2) < 0) {
-                    throw new HttpException(422, 'Cette dépense dépasse le solde disponible de la caisse.');
-                }
-            }
-
             $data['running_balance'] = 0;
             $transaction = $account->transactions()->create($data);
 
@@ -72,25 +68,6 @@ class CashLedgerService
                 $balance = bcadd($balance, $signed, 2);
                 $transaction->updateQuietly(['running_balance' => $balance]);
             });
-    }
-
-    protected function balanceBefore(CashAccount $account, string $date): string
-    {
-        $balance = (string) $account->initial_balance;
-
-        $account->transactions()
-            ->where('date', '<', $date)
-            ->orderBy('date')
-            ->orderBy('id')
-            ->each(function (CashTransaction $transaction) use (&$balance) {
-                $signed = $transaction->type === 'expense'
-                    ? bcmul($transaction->amount, '-1', 2)
-                    : (string) $transaction->amount;
-
-                $balance = bcadd($balance, $signed, 2);
-            });
-
-        return $balance;
     }
 
     public function summary(CashAccount $account): array

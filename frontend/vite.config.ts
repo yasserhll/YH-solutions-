@@ -52,6 +52,19 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
           {
+            // Identity must never be cached by the service worker either —
+            // the backend sends Cache-Control: no-store on every /api/*
+            // response (stops the *browser's* HTTP cache), but Workbox's
+            // own Cache Storage ignores that header and would cache this
+            // by URL regardless. Without this exclusion, one account's
+            // identity could still be served to a *different* account from
+            // the offline fallback after a login switch on the same
+            // browser. Must be registered before the general GET rule below
+            // (first match wins).
+            urlPattern: ({ url, request }) => request.method === 'GET' && url.pathname === '/api/me',
+            handler: 'NetworkOnly',
+          },
+          {
             // Every GET goes to the network first — this app is edited
             // constantly (mark present/absent, add a leave, etc.) and a
             // refetch right after a mutation must show the new value, not a

@@ -85,7 +85,9 @@ This is deliberately **not** "one balance per site" — it mirrors `Book1.xlsx` 
 
 `current_balance = initial_balance + entries − expenses`, computed as a running total across **all** transactions (all sites combined) ordered by `(date, id)` — this is what makes it match the Excel's single consolidated reste rather than a per-site figure.
 
-Because a transaction can be edited or backdated (not just appended), every write (`create`/`update`/`delete`) calls `recalculate()`, which walks every transaction on the account in date order and rewrites `running_balance` on each. An expense is blocked with a 422 if it would push the balance negative, unless `cash_accounts.allow_negative_balance` is true (SuperAdmin-only setting). All arithmetic uses `bcadd`/`bcmul` on strings to avoid float rounding drift — don't switch this to plain float math.
+Because a transaction can be edited or backdated (not just appended), every write (`create`/`update`/`delete`) calls `recalculate()`, which walks every transaction on the account in date order and rewrites `running_balance` on each. All arithmetic uses `bcadd`/`bcmul` on strings to avoid float rounding drift — don't switch this to plain float math.
+
+**A declared expense is never blocked for exceeding the balance** — `CashLedgerService::create()` used to reject one with a 422 (unless a since-removed `allow_negative_balance` flag was set); that's gone deliberately. A responsable declaring a real purchase shouldn't be stopped by the caisse not having been topped up yet — the running balance just goes negative (shown in red in the UI) until the SuperAdmin records a recharge (`entry`). Don't reintroduce a balance check on write.
 
 `CashAccount::currentBalance()` calls `->reorder()` before `->latest(...)` — the `transactions()` relation already has its own `orderBy('date')->orderBy('id')` baked in, and Eloquent's `orderBy`/`latest` calls **stack** rather than replace each other. Without `reorder()` first, the relation's ascending order wins and you silently get the *earliest* transaction's balance instead of the latest. This bit us once already; don't drop the `reorder()` call, and be wary of the same trap anywhere else that chains ordering onto a relation that predefines its own.
 
@@ -125,6 +127,12 @@ This is a genuine installable PWA (desktop and mobile — Chrome/Edge show an in
 - Icons live in `public/icons/`, generated from `src/assets/logo.jpg` by `scripts/generate-icons.mjs` (uses `sharp`, a devDependency) — standard (64/192/512) plus a separately-padded maskable 512 (OS icon shapes crop up to ~20% off each edge) plus an Apple touch icon. **Re-run `node scripts/generate-icons.mjs` whenever the logo changes** — the PNGs are checked in, not generated at build time.
 - App name is "Solution Administrative" (manifest `name`/`short_name`, `index.html` `<title>`, and the Apple-specific meta tags) — keep these three in sync if it's renamed again.
 - Test with `npm run build && npx vite preview` rather than `npm run dev` when checking real offline/install behavior — `devOptions.enabled: true` makes the SW active in dev too, but the production `generateSW` output is what actually ships.
+
+### Every API response is `Cache-Control: no-store` — don't remove this
+
+`app/Http/Middleware/PreventApiCaching.php` is appended to the whole `api` middleware group (`bootstrap/app.php`) and stamps `Cache-Control: no-store, no-cache, must-revalidate, private` on every `/api/*` response. This isn't optional hardening — without it, the **browser's own HTTP cache** (a layer beneath both axios and the service worker, keyed by URL only, not by the `Authorization` header) can serve one account's response to a *different* account that logs in afterward on the same browser. This was caught for real: `GET /api/me` came back with the previous session's role after switching accounts, which silently drove the whole UI's role-based rendering (nav items, site selector) off the wrong identity. `/api/me` also gets an explicit `NetworkOnly` rule in `vite.config.ts`'s `runtimeCaching`, registered *before* the general GET rule — Workbox's own Cache Storage ignores response `Cache-Control` headers for its own caching decision, so the backend header alone doesn't stop the service worker from caching identity too; both layers need the fix.
+
+If you ever add a second caching layer (a CDN, a reverse proxy) in front of this API, make sure it also respects `no-store` — don't assume the two existing safeguards cover it.
 
 ### Dashboard KPI cards link to their source
 

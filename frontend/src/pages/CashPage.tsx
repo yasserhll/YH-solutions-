@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
+import clsx from 'clsx';
 import { Plus, Pencil, Trash2, Wallet, TrendingUp, TrendingDown, Settings2 } from 'lucide-react';
 import { api, apiErrorMessage } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
@@ -95,7 +96,11 @@ export default function CashPage() {
       ? [
           {
             header: 'Reste',
-            accessor: (t: CashTransaction) => <span className="font-medium">{money(t.running_balance ?? 0)}</span>,
+            accessor: (t: CashTransaction) => (
+              <span className={clsx('font-medium', Number(t.running_balance ?? 0) < 0 && 'text-red-600 dark:text-red-400')}>
+                {money(t.running_balance ?? 0)}
+              </span>
+            ),
           } as Column<CashTransaction>,
         ]
       : []),
@@ -142,7 +147,12 @@ export default function CashPage() {
 
       {isSuperAdmin && account && (
         <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <KpiCard label="Solde actuel" value={money(account.summary.current_balance)} icon={Wallet} tone="green" />
+          <KpiCard
+            label="Solde actuel"
+            value={money(account.summary.current_balance)}
+            icon={Wallet}
+            tone={account.summary.current_balance < 0 ? 'red' : 'green'}
+          />
           <KpiCard label="Total entrées" value={money(account.summary.total_entries)} icon={TrendingUp} tone="blue" />
           <KpiCard label="Total dépenses" value={money(account.summary.total_expenses)} icon={TrendingDown} tone="red" />
           <KpiCard label="Opérations" value={account.summary.operations_count} icon={Wallet} />
@@ -310,10 +320,7 @@ function TransactionFormModal({ transaction, onClose }: { transaction: CashTrans
 
 function AccountSettingsModal({ account, onClose }: { account: CashAccount; onClose: () => void }) {
   const queryClient = useQueryClient();
-  const [form, setForm] = useState({
-    initial_balance: account.initial_balance,
-    allow_negative_balance: account.allow_negative_balance,
-  });
+  const [form, setForm] = useState({ initial_balance: account.initial_balance });
 
   const mutation = useMutation({
     mutationFn: () => api.put('/cash-account', form),
@@ -343,14 +350,10 @@ function AccountSettingsModal({ account, onClose }: { account: CashAccount; onCl
           value={form.initial_balance}
           onChange={(e) => setForm({ ...form, initial_balance: e.target.value })}
         />
-        <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-          <input
-            type="checkbox"
-            checked={form.allow_negative_balance}
-            onChange={(e) => setForm({ ...form, allow_negative_balance: e.target.checked })}
-          />
-          Autoriser un solde négatif
-        </label>
+        <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+          Une dépense n'est jamais bloquée par manque de solde — le solde peut devenir négatif jusqu'à la prochaine
+          recharge.
+        </p>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>
             Annuler

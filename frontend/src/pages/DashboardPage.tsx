@@ -120,7 +120,13 @@ export default function DashboardPage() {
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Caisse</h2>
           <div className="grid grid-cols-2 gap-4">
             {data.cash.current_balance !== null && (
-              <KpiCard label="Solde actuel" value={money(data.cash.current_balance)} icon={Wallet} tone="green" to="/caisse" />
+              <KpiCard
+                label="Solde actuel"
+                value={money(data.cash.current_balance)}
+                icon={Wallet}
+                tone={data.cash.current_balance < 0 ? 'red' : 'green'}
+                to="/caisse"
+              />
             )}
             <KpiCard label="Dépenses du mois" value={money(data.cash.expenses_month)} icon={TrendingDown} tone="red" to="/caisse" />
           </div>
