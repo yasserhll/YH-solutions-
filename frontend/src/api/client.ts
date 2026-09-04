@@ -26,6 +26,23 @@ api.interceptors.response.use(
   }
 );
 
+export async function downloadFile(url: string, params: Record<string, unknown>, fallbackFilename: string): Promise<void> {
+  const response = await api.get(url, { params, responseType: 'blob' });
+
+  const disposition = response.headers['content-disposition'] as string | undefined;
+  const match = disposition?.match(/filename="?([^"]+)"?/);
+  const filename = match?.[1] ?? fallbackFilename;
+
+  const blobUrl = window.URL.createObjectURL(response.data as Blob);
+  const link = document.createElement('a');
+  link.href = blobUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(blobUrl);
+}
+
 export function apiErrorMessage(error: unknown, fallback = 'Une erreur est survenue.'): string {
   if (axios.isAxiosError(error)) {
     const data = error.response?.data as { message?: string; errors?: Record<string, string[]> } | undefined;

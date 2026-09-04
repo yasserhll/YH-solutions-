@@ -62,6 +62,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/reports/movements', [ReportController::class, 'movements']);
     Route::get('/reports/cash', [ReportController::class, 'cash']);
 
+    Route::get('/reports/attendance/export', [ReportController::class, 'exportAttendance']);
+    Route::get('/reports/leaves/export', [ReportController::class, 'exportLeaves']);
+    Route::get('/reports/sanctions/export', [ReportController::class, 'exportSanctions']);
+    Route::get('/reports/movements/export', [ReportController::class, 'exportMovements']);
+    Route::get('/reports/cash/export', [ReportController::class, 'exportCash']);
+
     Route::middleware('superadmin')->group(function () {
         Route::post('/sites', [SiteController::class, 'store']);
         Route::put('/sites/{site}', [SiteController::class, 'update']);

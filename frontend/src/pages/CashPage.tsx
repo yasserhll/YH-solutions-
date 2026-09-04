@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
-import { Plus, Pencil, Trash2, Wallet, TrendingUp, TrendingDown, Settings2 } from 'lucide-react';
-import { api, apiErrorMessage } from '../api/client';
+import { Plus, Pencil, Trash2, Wallet, TrendingUp, TrendingDown, Settings2, Download } from 'lucide-react';
+import { api, apiErrorMessage, downloadFile } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
 import { useAuth } from '../contexts/AuthContext';
 import { useSites } from '../hooks/useReferenceData';
@@ -46,6 +46,16 @@ export default function CashPage() {
     queryKey: ['cash-account'],
     queryFn: () => api.get<CashAccount>('/cash-account').then((r) => r.data),
     enabled: isSuperAdmin,
+  });
+
+  const exportMutation = useMutation({
+    mutationFn: () =>
+      downloadFile(
+        '/reports/cash/export',
+        { ...siteParams, date_from: dateFrom || undefined, date_to: dateTo || undefined, beneficiary: beneficiary || undefined },
+        'caisse.xlsx',
+      ),
+    onError: (err) => toast.error(apiErrorMessage(err, "Échec de l'export.")),
   });
 
   const transactionsQuery = useQuery({
@@ -133,6 +143,9 @@ export default function CashPage() {
         description={isSuperAdmin ? 'Caisse commune — solde et recharges' : 'Déclarer vos achats — le solde est géré par le SuperAdmin'}
         actions={
           <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={() => exportMutation.mutate()} disabled={exportMutation.isPending}>
+              <Download size={16} /> {exportMutation.isPending ? 'Export en cours...' : 'Export Excel'}
+            </Button>
             {isSuperAdmin && (
               <Button variant="secondary" onClick={() => account && setEditingAccount(account)} disabled={!account}>
                 <Settings2 size={16} /> Réglages

@@ -16,6 +16,7 @@ const causeLabels: Record<AbsenceCause, string> = {
   maladie: 'Maladie',
   autorisee: 'Autorisée',
   non_autorisee: 'Non autorisée',
+  justifie: 'Justifié',
   conge: 'Congé',
 };
 
@@ -229,6 +230,7 @@ function AbsenceModal({
           <option value="maladie">Maladie</option>
           <option value="autorisee">Autorisée</option>
           <option value="non_autorisee">Non autorisée</option>
+          <option value="justifie">Justifié</option>
           <option value="conge">Congé</option>
         </SelectField>
         <TextAreaField

@@ -68,6 +68,7 @@ export default function DashboardPage() {
           <KpiCard label="Présents" value={data.attendance.present} icon={UserCheck} tone="green" to="/pointage" />
           <KpiCard label="Absents maladie" value={data.attendance.absent_maladie} icon={UserX} tone="amber" to="/pointage" />
           <KpiCard label="Absents autorisée" value={data.attendance.absent_autorisee} icon={UserX} tone="blue" to="/pointage" />
+          <KpiCard label="Absents justifié" value={data.attendance.absent_justifie} icon={UserX} tone="teal" to="/pointage" />
           <KpiCard
             label="Absents non autorisée"
             value={data.attendance.absent_non_autorisee}

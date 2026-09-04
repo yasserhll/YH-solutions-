@@ -6,7 +6,7 @@ interface KpiCardProps {
   label: string;
   value: string | number;
   icon: LucideIcon;
-  tone?: 'slate' | 'green' | 'red' | 'amber' | 'blue' | 'purple';
+  tone?: 'slate' | 'green' | 'red' | 'amber' | 'blue' | 'purple' | 'teal';
   to?: string;
 }
 
@@ -17,6 +17,7 @@ const tones: Record<NonNullable<KpiCardProps['tone']>, string> = {
   amber: 'bg-amber-100 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400',
   blue: 'bg-blue-100 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400',
   purple: 'bg-purple-100 text-purple-600 dark:bg-purple-500/15 dark:text-purple-400',
+  teal: 'bg-teal-100 text-teal-600 dark:bg-teal-500/15 dark:text-teal-400',
 };
 
 export function KpiCard({ label, value, icon: Icon, tone = 'slate', to }: KpiCardProps) {

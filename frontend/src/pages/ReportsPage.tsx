@@ -1,14 +1,25 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import clsx from 'clsx';
-import { api } from '../api/client';
+import { Download } from 'lucide-react';
+import { api, apiErrorMessage, downloadFile } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
 import type { Attendance, CashTransaction, DisciplinaryWarning, Entry, Exit, LeaveRequest, Paginated, Suspension } from '../types';
 import { PageHeader } from '../components/ui/PageHeader';
+import { Button } from '../components/ui/Button';
 import { DataTable, type Column } from '../components/ui/DataTable';
 import { StatusBadge } from '../components/ui/StatusBadge';
 
 const tabs = ['Pointage', 'Congés', 'Sanctions', 'Entrées / Sorties', 'Caisse'] as const;
+
+const exportEndpoints: Record<(typeof tabs)[number], { url: string; filename: string }> = {
+  Pointage: { url: '/reports/attendance/export', filename: 'pointage.xlsx' },
+  Congés: { url: '/reports/leaves/export', filename: 'conges.xlsx' },
+  Sanctions: { url: '/reports/sanctions/export', filename: 'sanctions.xlsx' },
+  'Entrées / Sorties': { url: '/reports/movements/export', filename: 'entrees-sorties.xlsx' },
+  Caisse: { url: '/reports/cash/export', filename: 'caisse.xlsx' },
+};
 
 export default function ReportsPage() {
   const [tab, setTab] = useState<(typeof tabs)[number]>('Pointage');
@@ -16,6 +27,14 @@ export default function ReportsPage() {
   const [dateTo, setDateTo] = useState('');
   const siteParams = useSiteParams();
   const period = { date_from: dateFrom || undefined, date_to: dateTo || undefined };
+
+  const exportMutation = useMutation({
+    mutationFn: () => {
+      const { url, filename } = exportEndpoints[tab];
+      return downloadFile(url, { ...siteParams, ...period }, filename);
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, "Échec de l'export.")),
+  });
 
   const attendanceQuery = useQuery({
     queryKey: ['report-attendance', siteParams, period],
@@ -117,20 +136,25 @@ export default function ReportsPage() {
         ))}
       </div>
 
-      <div className="mb-4 flex items-center gap-3">
-        <input
-          type="date"
-          value={dateFrom}
-          onChange={(e) => setDateFrom(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-        />
-        <span className="text-sm text-slate-400 dark:text-slate-500">à</span>
-        <input
-          type="date"
-          value={dateTo}
-          onChange={(e) => setDateTo(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-        />
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+          />
+          <span className="text-sm text-slate-400 dark:text-slate-500">à</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+          />
+        </div>
+        <Button variant="secondary" onClick={() => exportMutation.mutate()} disabled={exportMutation.isPending}>
+          <Download size={16} /> {exportMutation.isPending ? 'Export en cours...' : 'Export Excel'}
+        </Button>
       </div>
 
       <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">

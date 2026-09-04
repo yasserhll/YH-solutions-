@@ -6,7 +6,8 @@ import clsx from 'clsx';
 import { api, apiErrorMessage } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
 import { useUrlTab } from '../hooks/useUrlTab';
-import { useDepartments, usePositions } from '../hooks/useReferenceData';
+import { useDepartments, usePositions, useSites } from '../hooks/useReferenceData';
+import { useAuth } from '../contexts/AuthContext';
 import type { Employee, Entry, Exit, Paginated } from '../types';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Button';
@@ -190,13 +191,17 @@ export default function MovementsPage() {
 
 function EntryFormModal({ entry, onClose }: { entry: Entry | null; onClose: () => void }) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === 'superadmin';
   const { data: departments } = useDepartments();
   const { data: positions } = usePositions();
+  const { data: sites } = useSites();
   const [form, setForm] = useState({
     full_name: entry?.full_name ?? '',
     department_id: entry?.department_id ?? '',
     position_id: entry?.position_id ?? '',
     establishment: entry?.establishment ?? '',
+    site_id: entry?.site_id ?? '',
     entry_date: entry?.entry_date?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
   });
 
@@ -221,6 +226,16 @@ function EntryFormModal({ entry, onClose }: { entry: Entry | null; onClose: () =
         className="space-y-4"
       >
         <TextField label="Nom complet" required value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} />
+        {isSuperAdmin && !entry && (
+          <SelectField label="Site" required value={form.site_id} onChange={(e) => setForm({ ...form, site_id: e.target.value })}>
+            <option value="">Sélectionner...</option>
+            {sites?.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </SelectField>
+        )}
         <div className="grid grid-cols-2 gap-4">
           <SelectField label="Fonction" value={form.position_id} onChange={(e) => setForm({ ...form, position_id: e.target.value })}>
             <option value="">—</option>
@@ -262,10 +277,16 @@ function EntryFormModal({ entry, onClose }: { entry: Entry | null; onClose: () =
 
 function ExitFormModal({ exit, onClose }: { exit: Exit | null; onClose: () => void }) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === 'superadmin';
+  const { data: positions } = usePositions();
+  const { data: sites } = useSites();
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [manualMode, setManualMode] = useState(!!exit);
   const [form, setForm] = useState({
     full_name: exit?.full_name ?? '',
+    position_id: exit?.position_id ?? '',
+    site_id: exit?.site_id ?? '',
     entry_date: exit?.entry_date?.slice(0, 10) ?? '',
     exit_date: exit?.exit_date?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
     reason: exit?.reason ?? '',
@@ -307,6 +328,14 @@ function ExitFormModal({ exit, onClose }: { exit: Exit | null; onClose: () => vo
               value={form.full_name}
               onChange={(e) => setForm({ ...form, full_name: e.target.value })}
             />
+            <SelectField label="Fonction" value={form.position_id} onChange={(e) => setForm({ ...form, position_id: e.target.value })}>
+              <option value="">—</option>
+              {positions?.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </SelectField>
             <TextField
               label="Date d'entrée"
               type="date"
@@ -335,6 +364,24 @@ function ExitFormModal({ exit, onClose }: { exit: Exit | null; onClose: () => vo
               value={form.full_name}
               onChange={(e) => setForm({ ...form, full_name: e.target.value })}
             />
+            <SelectField label="Fonction" value={form.position_id} onChange={(e) => setForm({ ...form, position_id: e.target.value })}>
+              <option value="">—</option>
+              {positions?.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </SelectField>
+            {isSuperAdmin && !exit && (
+              <SelectField label="Site" required value={form.site_id} onChange={(e) => setForm({ ...form, site_id: e.target.value })}>
+                <option value="">Sélectionner...</option>
+                {sites?.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </SelectField>
+            )}
             <TextField
               label="Date d'entrée"
               type="date"

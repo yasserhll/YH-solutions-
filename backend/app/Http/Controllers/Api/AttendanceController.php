@@ -100,7 +100,7 @@ class AttendanceController extends Controller
             'employee_ids' => ['required', 'array', 'min:1'],
             'employee_ids.*' => ['exists:employees,id'],
             'status' => ['required', Rule::in(['present', 'absent'])],
-            'absence_cause' => ['required_if:status,absent', 'nullable', Rule::in(['maladie', 'autorisee', 'non_autorisee', 'conge'])],
+            'absence_cause' => ['required_if:status,absent', 'nullable', Rule::in(['maladie', 'autorisee', 'non_autorisee', 'justifie', 'conge'])],
             'description' => ['nullable', 'string'],
         ]);
 

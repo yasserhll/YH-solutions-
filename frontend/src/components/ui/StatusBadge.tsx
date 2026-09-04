@@ -7,6 +7,7 @@ const palettes: Record<string, string> = {
   amber: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',
   blue: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400',
   purple: 'bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-400',
+  teal: 'bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-400',
 };
 
 const map: Record<string, { label: string; color: keyof typeof palettes }> = {
@@ -15,6 +16,7 @@ const map: Record<string, { label: string; color: keyof typeof palettes }> = {
   maladie: { label: 'Maladie', color: 'amber' },
   autorisee: { label: 'Autorisée', color: 'blue' },
   non_autorisee: { label: 'Non autorisée', color: 'red' },
+  justifie: { label: 'Justifié', color: 'teal' },
   conge: { label: 'Congé', color: 'purple' },
   en_attente: { label: 'En attente', color: 'amber' },
   acceptee: { label: 'Acceptée', color: 'green' },

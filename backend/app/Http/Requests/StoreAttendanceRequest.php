@@ -18,7 +18,7 @@ class StoreAttendanceRequest extends FormRequest
             'employee_id' => ['required', 'exists:employees,id'],
             'date' => ['required', 'date'],
             'status' => ['required', Rule::in(['present', 'absent'])],
-            'absence_cause' => ['required_if:status,absent', 'nullable', Rule::in(['maladie', 'autorisee', 'non_autorisee', 'conge'])],
+            'absence_cause' => ['required_if:status,absent', 'nullable', Rule::in(['maladie', 'autorisee', 'non_autorisee', 'justifie', 'conge'])],
             'description' => ['nullable', 'string'],
         ];
     }
