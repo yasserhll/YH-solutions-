@@ -55,6 +55,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('exits', ExitController::class)->only(['index', 'store', 'update', 'destroy']);
 
     Route::apiResource('cash-transactions', CashTransactionController::class)->only(['index', 'store']);
+    Route::get('/cash-account', [CashAccountController::class, 'show']);
 
     Route::get('/reports/attendance', [ReportController::class, 'attendance']);
     Route::get('/reports/leaves', [ReportController::class, 'leaves']);
@@ -83,7 +84,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::apiResource('users', UserController::class)->except(['show']);
 
-        Route::get('/cash-account', [CashAccountController::class, 'show']);
         Route::put('/cash-account', [CashAccountController::class, 'update']);
         Route::apiResource('cash-transactions', CashTransactionController::class)->only(['update', 'destroy']);
     });

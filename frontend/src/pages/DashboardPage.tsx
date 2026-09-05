@@ -122,10 +122,19 @@ export default function DashboardPage() {
           <div className="grid grid-cols-2 gap-4">
             {data.cash.current_balance !== null && (
               <KpiCard
-                label="Solde actuel"
+                label="Solde caisse global actuel"
                 value={money(data.cash.current_balance)}
                 icon={Wallet}
                 tone={data.cash.current_balance < 0 ? 'red' : 'green'}
+                to="/caisse"
+              />
+            )}
+            {data.cash.site_balance !== null && (
+              <KpiCard
+                label="Solde de mon site"
+                value={money(data.cash.site_balance)}
+                icon={Wallet}
+                tone={data.cash.site_balance <= 0 ? 'red' : 'green'}
                 to="/caisse"
               />
             )}

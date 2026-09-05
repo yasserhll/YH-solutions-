@@ -7,8 +7,10 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * Singleton: exactly one row, representing the company-wide caisse (the
- * reference Excel's "Admin" sheet — one shared solde, not one per site).
+ * Singleton: exactly one row, representing the master/common caisse (the
+ * reference Excel's "Admin" sheet). A site's own balance is NOT a row here —
+ * it's derived from cash_transactions.site_running_balance, see
+ * CashTransaction::currentSiteBalance().
  */
 class CashAccount extends Model
 {

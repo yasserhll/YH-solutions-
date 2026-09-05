@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
-import { Plus, Pencil, Trash2, Wallet, TrendingUp, TrendingDown, Settings2, Download } from 'lucide-react';
+import { Plus, Pencil, Trash2, Wallet, Settings2, Download } from 'lucide-react';
 import { api, apiErrorMessage, downloadFile } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
 import { useAuth } from '../contexts/AuthContext';
 import { useSites } from '../hooks/useReferenceData';
-import type { CashAccount, CashTransaction, CashTransactionType, Paginated } from '../types';
+import type { CashAccount, CashSiteBalance, CashTransaction, CashTransactionType, Paginated } from '../types';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Button';
 import { DataTable, type Column } from '../components/ui/DataTable';
@@ -39,13 +39,14 @@ export default function CashPage() {
   const [deleting, setDeleting] = useState<CashTransaction | null>(null);
   const [editingAccount, setEditingAccount] = useState<CashAccount | null>(null);
 
-  // Only the SuperAdmin sees the caisse's solde/reste — exactly like the
-  // reference Excel, where only the "Admin" sheet carries a balance. A
-  // responsable only ever declares purchases (see backend for enforcement).
+  // SuperAdmin gets the master caisse + every site's balance; a responsable
+  // gets only their own site's derived balance — shaped server-side, the
+  // master balance never reaches a responsable's response at all. The role
+  // is part of the query key so switching accounts never reads a
+  // differently-shaped response left in cache under the same key.
   const accountQuery = useQuery({
-    queryKey: ['cash-account'],
-    queryFn: () => api.get<CashAccount>('/cash-account').then((r) => r.data),
-    enabled: isSuperAdmin,
+    queryKey: ['cash-account', user?.id],
+    queryFn: () => api.get<CashAccount | CashSiteBalance>('/cash-account').then((r) => r.data),
   });
 
   const exportMutation = useMutation({
@@ -86,7 +87,14 @@ export default function CashPage() {
     onError: (err) => toast.error(apiErrorMessage(err)),
   });
 
-  const account = accountQuery.data;
+  const account = isSuperAdmin ? (accountQuery.data as CashAccount | undefined) : undefined;
+  const siteBalance = !isSuperAdmin ? (accountQuery.data as CashSiteBalance | undefined) : undefined;
+
+  const amountTone: Record<CashTransactionType, string> = {
+    expense: 'text-red-600 dark:text-red-400',
+    entry: 'text-emerald-600 dark:text-emerald-400',
+    transfer: 'text-blue-600 dark:text-blue-400',
+  };
 
   const columns: Column<CashTransaction>[] = [
     { header: 'Date', accessor: (t) => new Date(t.date).toLocaleDateString('fr-FR') },
@@ -96,24 +104,30 @@ export default function CashPage() {
     { header: 'Type', accessor: (t) => <StatusBadge status={t.type} /> },
     {
       header: 'Montant',
-      accessor: (t) => (
-        <span className={t.type === 'expense' ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}>
-          {money(t.amount)}
-        </span>
-      ),
+      accessor: (t) => <span className={amountTone[t.type]}>{money(t.amount)}</span>,
     },
-    ...(isSuperAdmin
-      ? [
-          {
-            header: 'Reste',
-            accessor: (t: CashTransaction) => (
-              <span className={clsx('font-medium', Number(t.running_balance ?? 0) < 0 && 'text-red-600 dark:text-red-400')}>
-                {money(t.running_balance ?? 0)}
+    isSuperAdmin
+      ? {
+          // The real global caisse balance — never reduced by a transfer.
+          header: 'Reste global',
+          accessor: (t: CashTransaction) => (
+            <span className={clsx('font-medium', Number(t.running_balance ?? 0) < 0 && 'text-red-600 dark:text-red-400')}>
+              {money(t.running_balance ?? 0)}
+            </span>
+          ),
+        }
+      : {
+          // A responsable's own site's remaining spending limit.
+          header: 'Solde site',
+          accessor: (t: CashTransaction) =>
+            t.site_running_balance != null ? (
+              <span className={clsx('font-medium', Number(t.site_running_balance) < 0 && 'text-red-600 dark:text-red-400')}>
+                {money(t.site_running_balance)}
               </span>
+            ) : (
+              '—'
             ),
-          } as Column<CashTransaction>,
-        ]
-      : []),
+        },
     ...(isSuperAdmin
       ? [
           {
@@ -140,7 +154,11 @@ export default function CashPage() {
     <div>
       <PageHeader
         title="Caisse"
-        description={isSuperAdmin ? 'Caisse commune — solde et recharges' : 'Déclarer vos achats — le solde est géré par le SuperAdmin'}
+        description={
+          isSuperAdmin
+            ? 'Caisse commune, transferts vers les sites et solde de chaque site'
+            : 'Déclarer vos achats dans la limite du solde transféré à votre site'
+        }
         actions={
           <div className="flex items-center gap-2">
             <Button variant="secondary" onClick={() => exportMutation.mutate()} disabled={exportMutation.isPending}>
@@ -161,14 +179,25 @@ export default function CashPage() {
       {isSuperAdmin && account && (
         <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
           <KpiCard
-            label="Solde actuel"
+            label="Solde caisse global actuel"
             value={money(account.summary.current_balance)}
             icon={Wallet}
             tone={account.summary.current_balance < 0 ? 'red' : 'green'}
           />
-          <KpiCard label="Total entrées" value={money(account.summary.total_entries)} icon={TrendingUp} tone="blue" />
-          <KpiCard label="Total dépenses" value={money(account.summary.total_expenses)} icon={TrendingDown} tone="red" />
-          <KpiCard label="Opérations" value={account.summary.operations_count} icon={Wallet} />
+          {account.summary.sites.map((s) => (
+            <KpiCard key={s.site_id} label={`Solde ${s.site_name}`} value={money(s.balance)} icon={Wallet} tone={s.balance < 0 ? 'red' : 'teal'} />
+          ))}
+        </div>
+      )}
+
+      {!isSuperAdmin && siteBalance && (
+        <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <KpiCard
+            label="Solde de mon site"
+            value={money(siteBalance.site_balance)}
+            icon={Wallet}
+            tone={siteBalance.site_balance <= 0 ? 'red' : 'green'}
+          />
         </div>
       )}
 
@@ -283,14 +312,27 @@ function TransactionFormModal({ transaction, onClose }: { transaction: CashTrans
           >
             <option value="expense">Dépense (achat d'un site)</option>
             <option value="entry">Entrée / recharge (caisse commune)</option>
+            <option value="transfer">Transfert vers un site</option>
           </SelectField>
         ) : (
           <p className="rounded-lg bg-slate-50 dark:bg-slate-800 px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
-            Vous déclarez un achat (dépense) pour votre site. Seul le SuperAdmin peut recharger la caisse.
+            Vous déclarez un achat (dépense) pour votre site, dans la limite du solde qui lui a été transféré par le
+            SuperAdmin.
           </p>
         )}
-        {isSuperAdmin && form.type === 'expense' && (
-          <SelectField label="Site" required value={form.site_id} onChange={(e) => setForm({ ...form, site_id: e.target.value })}>
+        {isSuperAdmin && form.type === 'transfer' && (
+          <p className="rounded-lg bg-slate-50 dark:bg-slate-800 px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
+            Ce montant ne réduit pas le solde de la caisse globale — il définit (ou augmente) le plafond de dépense
+            autorisé pour le site sélectionné.
+          </p>
+        )}
+        {isSuperAdmin && (form.type === 'expense' || form.type === 'transfer') && (
+          <SelectField
+            label={form.type === 'transfer' ? 'Site destinataire' : 'Site'}
+            required
+            value={form.site_id}
+            onChange={(e) => setForm({ ...form, site_id: e.target.value })}
+          >
             <option value="">Sélectionner...</option>
             {sites?.map((s) => (
               <option key={s.id} value={s.id}>
@@ -364,8 +406,10 @@ function AccountSettingsModal({ account, onClose }: { account: CashAccount; onCl
           onChange={(e) => setForm({ ...form, initial_balance: e.target.value })}
         />
         <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-          Une dépense n'est jamais bloquée par manque de solde — le solde peut devenir négatif jusqu'à la prochaine
-          recharge.
+          Un transfert vers un site ne réduit jamais ce solde global — il ne fait que définir le plafond de dépense
+          d'un site. Seule une dépense réelle réduit le solde global, et n'est jamais bloquée par manque de solde (il
+          peut devenir négatif jusqu'à la prochaine recharge). En revanche, une dépense est bloquée si elle dépasse le
+          plafond restant du site qui la déclare.
         </p>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>

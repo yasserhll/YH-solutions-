@@ -72,18 +72,30 @@ class DatabaseSeeder extends Seeder
             $dayOffsetBase = 20 - $siteIndex * 5;
 
             if ($siteIndex > 0) {
-                // Recharge the shared caisse before this site's purchases —
-                // no site_id, just like the site-less "Entree" rows in the
-                // reference Excel's Admin sheet.
+                // Recharge the shared master caisse before this site's
+                // transfer — no site_id, just like the site-less "Entree"
+                // rows in the reference Excel's Admin sheet.
                 $ledger->create($cashAccount, [
                     'type' => 'entry',
                     'site_id' => null,
-                    'date' => now()->subDays($dayOffsetBase + 1)->toDateString(),
+                    'date' => now()->subDays($dayOffsetBase + 2)->toDateString(),
                     'beneficiary' => 'Direction',
                     'description' => 'Recharge de caisse',
                     'amount' => 4000,
                 ]);
             }
+
+            // Every site needs its own balance funded via a transfer before
+            // it can declare expenses (expenses are now blocked at 0 against
+            // the site's own balance, not the master caisse).
+            $ledger->create($cashAccount, [
+                'type' => 'transfer',
+                'site_id' => $site->id,
+                'date' => now()->subDays($dayOffsetBase + 1)->toDateString(),
+                'beneficiary' => null,
+                'description' => 'Transfert vers '.$siteName,
+                'amount' => 2500,
+            ]);
 
             User::create([
                 'name' => 'Responsable '.$siteName,

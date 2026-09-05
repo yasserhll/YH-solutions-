@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\InteractsWithSites;
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
 use App\Models\CashAccount;
+use App\Models\CashTransaction;
 use App\Models\DisciplinaryWarning;
 use App\Models\Employee;
 use App\Models\EmployeeExit;
@@ -36,11 +37,11 @@ class DashboardController extends Controller
 
         $isSuperAdmin = $request->user()->isSuperAdmin();
 
-        $recentOperationsQuery = $this->scopeToSite(\App\Models\CashTransaction::query(), $request)->with('site');
+        $recentOperationsQuery = $this->scopeToSite(CashTransaction::query(), $request)->with('site');
         if (! $isSuperAdmin) {
-            // A responsable's dashboard never shows recharges — only their
-            // own site's declared purchases, matching the reference Excel.
-            $recentOperationsQuery->where('type', 'expense');
+            // A responsable's dashboard never shows master recharges — only
+            // their own site's declared purchases and transfers received.
+            $recentOperationsQuery->whereIn('type', ['expense', 'transfer']);
         }
         $recentOperations = $recentOperationsQuery->orderByDesc('date')->orderByDesc('id')->limit(5)->get();
         if (! $isSuperAdmin) {
@@ -75,12 +76,18 @@ class DashboardController extends Controller
                 'suspensions' => (clone $suspensions)->count(),
             ],
             'cash' => [
+                // Master balance: SuperAdmin only, never shown to a responsable.
+                // Never reduced by a transfer — only entries/expenses move it.
                 'current_balance' => $isSuperAdmin ? round(CashAccount::singleton()->currentBalance(), 2) : null,
-                'expenses_today' => (float) (clone $this->scopeToSite(\App\Models\CashTransaction::query(), $request))
+                // A responsable's own site's remaining spending limit; SuperAdmin has no single "own site".
+                'site_balance' => (! $isSuperAdmin && $request->user()->site_id)
+                    ? CashTransaction::currentSiteBalance($request->user()->site_id)
+                    : null,
+                'expenses_today' => (float) (clone $this->scopeToSite(CashTransaction::query(), $request))
                     ->where('type', 'expense')->whereDate('date', $today)->sum('amount'),
-                'expenses_month' => (float) (clone $this->scopeToSite(\App\Models\CashTransaction::query(), $request))
+                'expenses_month' => (float) (clone $this->scopeToSite(CashTransaction::query(), $request))
                     ->where('type', 'expense')->where('date', '>=', $monthStart)->sum('amount'),
-                'total_expenses' => (float) (clone $this->scopeToSite(\App\Models\CashTransaction::query(), $request))
+                'total_expenses' => (float) (clone $this->scopeToSite(CashTransaction::query(), $request))
                     ->where('type', 'expense')->sum('amount'),
                 'recent_operations' => $recentOperations,
             ],

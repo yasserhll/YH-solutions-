@@ -193,7 +193,7 @@ export interface Exit {
   position?: Position | null;
 }
 
-export type CashTransactionType = 'expense' | 'entry';
+export type CashTransactionType = 'expense' | 'entry' | 'transfer';
 
 export interface CashTransaction {
   id: number;
@@ -204,9 +204,18 @@ export interface CashTransaction {
   beneficiary: string | null;
   description: string | null;
   amount: string;
+  /** The real master caisse balance after this row — SuperAdmin only. */
   running_balance?: string;
+  /** A site's remaining spending limit after this row — null for `entry` rows. */
+  site_running_balance?: string | null;
   site?: Site;
   creator?: { id: number; name: string } | null;
+}
+
+export interface CashAccountSiteSummary {
+  site_id: number;
+  site_name: string;
+  balance: number;
 }
 
 export interface CashAccountSummary {
@@ -214,15 +223,22 @@ export interface CashAccountSummary {
   total_entries: number;
   total_expenses: number;
   current_balance: number;
+  sites: CashAccountSiteSummary[];
   operations_count: number;
 }
 
-/** Singleton: the one company-wide caisse (see backend CashAccount::singleton). */
+/** SuperAdmin shape of GET /cash-account: the real master caisse + every site's remaining limit. */
 export interface CashAccount {
   id: number;
   initial_balance: string;
   allow_negative_balance: boolean;
   summary: CashAccountSummary;
+}
+
+/** Responsable shape of GET /cash-account: only their own site's remaining limit. */
+export interface CashSiteBalance {
+  site_id: number;
+  site_balance: number;
 }
 
 export interface Paginated<T> {
@@ -262,6 +278,7 @@ export interface DashboardData {
   };
   cash: {
     current_balance: number | null;
+    site_balance: number | null;
     expenses_today: number;
     expenses_month: number;
     total_expenses: number;

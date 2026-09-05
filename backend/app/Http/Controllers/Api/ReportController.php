@@ -274,8 +274,9 @@ class ReportController extends Controller
 
         if (! $isSuperAdmin) {
             // Same rule as everywhere else: a responsable's history is only
-            // their own declared purchases, never recharges.
-            $query->where('type', 'expense');
+            // their own declared purchases and transfers received, never
+            // master-caisse recharges.
+            $query->whereIn('type', ['expense', 'transfer']);
         }
 
         if ($beneficiary = $request->query('beneficiary')) {
@@ -304,7 +305,11 @@ class ReportController extends Controller
         $rows = $this->cashQuery($request)->get()->map(function (CashTransaction $t) use ($isSuperAdmin) {
             $row = [
                 $t->date->format('d/m/Y'),
-                $t->type === 'expense' ? 'Dépense' : 'Entrée',
+                match ($t->type) {
+                    'expense' => 'Dépense',
+                    'entry' => 'Entrée',
+                    'transfer' => 'Transfert',
+                },
                 $t->beneficiary,
                 $t->site?->name ?? '—',
                 $t->description,
@@ -312,22 +317,24 @@ class ReportController extends Controller
             ];
 
             if ($isSuperAdmin) {
+                // The admin's real global balance — never reduced by a transfer.
                 $row[] = (float) $t->running_balance;
+            } else {
+                // A responsable's own site's remaining spending limit.
+                $row[] = $t->site_running_balance !== null ? (float) $t->site_running_balance : null;
             }
 
             return $row;
         });
 
         $headers = ['Date', 'Type', 'Bénéficiaire', 'Site', 'Description', 'Montant (DH)'];
-        if ($isSuperAdmin) {
-            $headers[] = 'Reste (DH)';
-        }
+        $headers[] = $isSuperAdmin ? 'Reste global (DH)' : 'Solde site (DH)';
 
         return $this->excel->stream(
             "caisse-{$this->exportSiteLabel($request)}.xlsx",
             $headers,
             $rows,
-            fn (array $row) => $row[1] === 'Entrée',
+            fn (array $row) => in_array($row[1], ['Entrée', 'Transfert'], true),
         );
     }
 }
