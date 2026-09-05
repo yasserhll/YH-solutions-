@@ -18,15 +18,24 @@ import { EmployeeSelect } from '../components/ui/EmployeeSelect';
 
 export default function AssignmentsPage() {
   const [page, setPage] = useState(1);
+  const [departmentId, setDepartmentId] = useState('');
+  const [positionId, setPositionId] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Assignment | null>(null);
   const [deleting, setDeleting] = useState<Assignment | null>(null);
   const siteParams = useSiteParams();
   const queryClient = useQueryClient();
+  const { data: departments } = useDepartments();
+  const { data: positions } = usePositions();
 
   const { data, isLoading } = useQuery({
-    queryKey: ['assignments', siteParams, page],
-    queryFn: () => api.get<Paginated<Assignment>>('/assignments', { params: { ...siteParams, page } }).then((r) => r.data),
+    queryKey: ['assignments', siteParams, page, departmentId, positionId],
+    queryFn: () =>
+      api
+        .get<Paginated<Assignment>>('/assignments', {
+          params: { ...siteParams, page, department_id: departmentId || undefined, position_id: positionId || undefined },
+        })
+        .then((r) => r.data),
   });
 
   const deleteMutation = useMutation({
@@ -73,6 +82,33 @@ export default function AssignmentsPage() {
           </Button>
         }
       />
+
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <select
+          value={departmentId}
+          onChange={(e) => (setDepartmentId(e.target.value), setPage(1))}
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+        >
+          <option value="">Tous les départements</option>
+          {departments?.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
+            </option>
+          ))}
+        </select>
+        <select
+          value={positionId}
+          onChange={(e) => (setPositionId(e.target.value), setPage(1))}
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+        >
+          <option value="">Toutes les fonctions</option>
+          {positions?.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+      </div>
 
       <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <DataTable columns={columns} rows={data?.data ?? []} isLoading={isLoading} keyFn={(a) => a.id} />

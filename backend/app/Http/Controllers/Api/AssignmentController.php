@@ -21,6 +21,12 @@ class AssignmentController extends Controller
         if ($employeeId = $request->query('employee_id')) {
             $query->where('employee_id', $employeeId);
         }
+        if ($departmentId = $request->query('department_id')) {
+            $query->where('department_id', $departmentId);
+        }
+        if ($positionId = $request->query('position_id')) {
+            $query->where('position_id', $positionId);
+        }
 
         return $query->orderByDesc('start_date')->paginate($request->integer('per_page', 15));
     }

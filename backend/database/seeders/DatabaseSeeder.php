@@ -45,9 +45,48 @@ class DatabaseSeeder extends Seeder
 
         $employeeNames = [
             'Ben Guerir' => ['Ahmed Benali', 'Youssef El Amrani', 'Karim Fassi', 'Nadia Chraibi', 'Rachid Idrissi'],
-            'Louta' => ['Mohamed Alaoui', 'Samira Bennis', 'Hicham Tazi', 'Fatima Zahra Ouazzani', 'Omar Sqalli'],
             'Bouchane' => ['Abdellah Kabbaj', 'Latifa Berrada', 'Younes Cherkaoui', 'Imane Belhaj', 'Said Tahiri'],
             'Mzinda' => ['Khalid Mernissi', 'Salma Guessous', 'Driss Lahlou', 'Naima Skalli', 'Anas Bouzidi'],
+        ];
+
+        // Louta's real personnel roster (name + real fonction), from
+        // "LA LISTE PERSONNEL DE LOUTA.xlsx" — replaces fabricated demo
+        // employees for this site. Only Employee/Assignment/Entry rows are
+        // created for them (see below); no synthetic attendance/leave/
+        // sanction/exit history is invented for real, named individuals,
+        // unlike the placeholder-name demo data generated for the other 3
+        // sites further down.
+        $loutaRoster = json_decode(file_get_contents(__DIR__.'/data/louta_personnel.json'), true);
+
+        // Best-effort fonction -> department mapping: the source sheet has
+        // no department column, so this groups each real fonction under the
+        // closest existing department for filtering/reporting purposes.
+        $loutaDepartmentByFonction = [
+            'Chargee Administrative' => 'Administration',
+            "Chef D'Equipe" => 'Exploitation',
+            'Agent De Maintenance' => 'Maintenance',
+            'Technicien' => 'Maintenance',
+            'Stagiaire' => 'Administration',
+            "Assistante D'Achat" => 'Administration',
+            'Femme De Menage' => 'Moyens généraux',
+            'Animateur Hse' => 'HSE',
+            'Pointeur' => 'Exploitation',
+            'Pompiste' => 'Exploitation',
+            'Chauffeur De Camion' => 'Exploitation',
+            "Chauffeur D'Arroseur" => 'Exploitation',
+            'Chauffeur De Transport' => 'Exploitation',
+            'Conducteur De Pelle' => 'Exploitation',
+            'Conducteur De Bulldozer' => 'Exploitation',
+            'Conducteur De Niveleuse' => 'Exploitation',
+            'Conducteur De Chargeuse' => 'Exploitation',
+            "Conducteur D'Engin" => 'Exploitation',
+            'Mecanicien' => 'Maintenance',
+            'Chef Mecanicien' => 'Maintenance',
+            'Pneumaticien' => 'Maintenance',
+            'Chaudronnier' => 'Maintenance',
+            'Aide Mecanicien' => 'Maintenance',
+            'Ouvrier Polyvalent' => 'Exploitation',
+            'Agent De Securite' => 'Moyens généraux',
         ];
 
         $ledger = new CashLedgerService;
@@ -105,123 +144,169 @@ class DatabaseSeeder extends Seeder
                 'site_id' => $site->id,
             ]);
 
-            $employees = collect();
-            foreach ($employeeNames[$siteName] as $index => $fullName) {
-                $department = $departments->values()->get($index % $departments->count());
-                $position = $positions->values()->get($index % $positions->count());
-                $entryDate = now()->subDays(rand(60, 900));
+            if ($siteName === 'Louta') {
+                // Real roster: only Employee/Assignment/Entry rows, actif,
+                // no fabricated attendance/leave/sanction/exit history for
+                // named individuals (see $loutaRoster comment above).
+                foreach ($loutaRoster as $person) {
+                    $positionName = $person['fonction'];
+                    if (! isset($positions[$positionName])) {
+                        $positions[$positionName] = Position::firstOrCreate(['name' => $positionName]);
+                    }
+                    $position = $positions[$positionName];
+                    $departmentName = $loutaDepartmentByFonction[$positionName] ?? null;
+                    $department = $departmentName ? $departments[$departmentName] : null;
+                    $entryDate = now()->subDays(rand(60, 1200));
 
-                $employee = Employee::create([
-                    'full_name' => $fullName,
-                    'site_id' => $site->id,
-                    'department_id' => $department->id,
-                    'position_id' => $position->id,
-                    'establishment' => $siteName,
-                    'entry_date' => $entryDate,
-                    'status' => 'actif',
-                ]);
+                    $employee = Employee::create([
+                        'full_name' => $person['full_name'],
+                        'site_id' => $site->id,
+                        'department_id' => $department?->id,
+                        'position_id' => $position->id,
+                        'establishment' => $siteName,
+                        'entry_date' => $entryDate,
+                        'status' => 'actif',
+                        'notes' => $person['matricule'] ? 'Matricule: '.$person['matricule'] : null,
+                    ]);
 
-                Assignment::create([
-                    'employee_id' => $employee->id,
-                    'site_id' => $site->id,
-                    'department_id' => $department->id,
-                    'position_id' => $position->id,
-                    'start_date' => $entryDate,
-                    'is_current' => true,
-                ]);
-
-                Entry::create([
-                    'employee_id' => $employee->id,
-                    'full_name' => $fullName,
-                    'position_id' => $position->id,
-                    'department_id' => $department->id,
-                    'establishment' => $siteName,
-                    'site_id' => $site->id,
-                    'entry_date' => $entryDate,
-                ]);
-
-                $employees->push($employee);
-            }
-
-            foreach ($employees as $index => $employee) {
-                for ($day = 0; $day < 10; $day++) {
-                    $date = now()->subDays($day);
-                    $isAbsent = $index === 0 && $day === 2;
-
-                    Attendance::create([
+                    Assignment::create([
                         'employee_id' => $employee->id,
                         'site_id' => $site->id,
-                        'date' => $date,
-                        'status' => $isAbsent ? 'absent' : 'present',
-                        'absence_cause' => $isAbsent ? 'maladie' : null,
-                        'description' => $isAbsent ? 'Absence pour rendez-vous médical.' : null,
+                        'department_id' => $department?->id,
+                        'position_id' => $position->id,
+                        'start_date' => $entryDate,
+                        'is_current' => true,
+                    ]);
+
+                    Entry::create([
+                        'employee_id' => $employee->id,
+                        'full_name' => $person['full_name'],
+                        'position_id' => $position->id,
+                        'department_id' => $department?->id,
+                        'establishment' => $siteName,
+                        'site_id' => $site->id,
+                        'entry_date' => $entryDate,
                     ]);
                 }
+            } else {
+                $employees = collect();
+                foreach ($employeeNames[$siteName] as $index => $fullName) {
+                    $department = $departments->values()->get($index % $departments->count());
+                    $position = $positions->values()->get($index % $positions->count());
+                    $entryDate = now()->subDays(rand(60, 900));
+
+                    $employee = Employee::create([
+                        'full_name' => $fullName,
+                        'site_id' => $site->id,
+                        'department_id' => $department->id,
+                        'position_id' => $position->id,
+                        'establishment' => $siteName,
+                        'entry_date' => $entryDate,
+                        'status' => 'actif',
+                    ]);
+
+                    Assignment::create([
+                        'employee_id' => $employee->id,
+                        'site_id' => $site->id,
+                        'department_id' => $department->id,
+                        'position_id' => $position->id,
+                        'start_date' => $entryDate,
+                        'is_current' => true,
+                    ]);
+
+                    Entry::create([
+                        'employee_id' => $employee->id,
+                        'full_name' => $fullName,
+                        'position_id' => $position->id,
+                        'department_id' => $department->id,
+                        'establishment' => $siteName,
+                        'site_id' => $site->id,
+                        'entry_date' => $entryDate,
+                    ]);
+
+                    $employees->push($employee);
+                }
+
+                foreach ($employees as $index => $employee) {
+                    for ($day = 0; $day < 10; $day++) {
+                        $date = now()->subDays($day);
+                        $isAbsent = $index === 0 && $day === 2;
+
+                        Attendance::create([
+                            'employee_id' => $employee->id,
+                            'site_id' => $site->id,
+                            'date' => $date,
+                            'status' => $isAbsent ? 'absent' : 'present',
+                            'absence_cause' => $isAbsent ? 'maladie' : null,
+                            'description' => $isAbsent ? 'Absence pour rendez-vous médical.' : null,
+                        ]);
+                    }
+                }
+
+                $requester = $employees->first();
+                $leaveRequest = LeaveRequest::create([
+                    'employee_id' => $requester->id,
+                    'site_id' => $site->id,
+                    'request_date' => now()->subDays(20),
+                    'desired_start_date' => now()->subDays(10),
+                    'duration_days' => 10,
+                    'reason' => 'Congé annuel',
+                    'status' => 'acceptee',
+                ]);
+
+                $leave = Leave::create([
+                    'employee_id' => $requester->id,
+                    'site_id' => $site->id,
+                    'leave_request_id' => $leaveRequest->id,
+                    'start_date' => now()->subDays(10),
+                    'duration_days' => 10,
+                    'end_date' => now()->subDays(1),
+                    'reason' => 'Congé annuel',
+                    'status' => 'en_cours',
+                ]);
+
+                $leave->extensions()->create([
+                    'extra_days' => 5,
+                    'reason' => 'Problème familial',
+                    'previous_end_date' => now()->subDays(1),
+                    'new_end_date' => now()->addDays(4),
+                ]);
+                $leave->update(['end_date' => now()->addDays(4), 'duration_days' => 15]);
+
+                $warnedEmployee = $employees->get(1);
+                DisciplinaryWarning::create([
+                    'employee_id' => $warnedEmployee->id,
+                    'site_id' => $site->id,
+                    'date' => now()->subDays(15),
+                    'reason' => 'Retard répété',
+                    'description' => 'Retards constatés à trois reprises durant le mois.',
+                ]);
+
+                $suspendedEmployee = $employees->get(2);
+                Suspension::create([
+                    'employee_id' => $suspendedEmployee->id,
+                    'site_id' => $site->id,
+                    'date' => now()->subDays(5),
+                    'reason' => 'Non-respect des consignes de sécurité',
+                    'description' => 'Mise à pied suite à un incident HSE.',
+                    'duration_days' => 3,
+                    'start_date' => now()->subDays(5),
+                    'end_date' => now()->subDays(3),
+                ]);
+
+                $exitedEmployee = $employees->last();
+                EmployeeExit::create([
+                    'employee_id' => $exitedEmployee->id,
+                    'full_name' => $exitedEmployee->full_name,
+                    'position_id' => $exitedEmployee->position_id,
+                    'department_id' => $exitedEmployee->department_id,
+                    'site_id' => $site->id,
+                    'entry_date' => $exitedEmployee->entry_date,
+                    'exit_date' => now()->subDays(2),
+                    'reason' => 'Fin de contrat',
+                ]);
+                $exitedEmployee->update(['status' => 'sorti', 'exit_date' => now()->subDays(2)]);
             }
-
-            $requester = $employees->first();
-            $leaveRequest = LeaveRequest::create([
-                'employee_id' => $requester->id,
-                'site_id' => $site->id,
-                'request_date' => now()->subDays(20),
-                'desired_start_date' => now()->subDays(10),
-                'duration_days' => 10,
-                'reason' => 'Congé annuel',
-                'status' => 'acceptee',
-            ]);
-
-            $leave = Leave::create([
-                'employee_id' => $requester->id,
-                'site_id' => $site->id,
-                'leave_request_id' => $leaveRequest->id,
-                'start_date' => now()->subDays(10),
-                'duration_days' => 10,
-                'end_date' => now()->subDays(1),
-                'reason' => 'Congé annuel',
-                'status' => 'en_cours',
-            ]);
-
-            $leave->extensions()->create([
-                'extra_days' => 5,
-                'reason' => 'Problème familial',
-                'previous_end_date' => now()->subDays(1),
-                'new_end_date' => now()->addDays(4),
-            ]);
-            $leave->update(['end_date' => now()->addDays(4), 'duration_days' => 15]);
-
-            $warnedEmployee = $employees->get(1);
-            DisciplinaryWarning::create([
-                'employee_id' => $warnedEmployee->id,
-                'site_id' => $site->id,
-                'date' => now()->subDays(15),
-                'reason' => 'Retard répété',
-                'description' => 'Retards constatés à trois reprises durant le mois.',
-            ]);
-
-            $suspendedEmployee = $employees->get(2);
-            Suspension::create([
-                'employee_id' => $suspendedEmployee->id,
-                'site_id' => $site->id,
-                'date' => now()->subDays(5),
-                'reason' => 'Non-respect des consignes de sécurité',
-                'description' => 'Mise à pied suite à un incident HSE.',
-                'duration_days' => 3,
-                'start_date' => now()->subDays(5),
-                'end_date' => now()->subDays(3),
-            ]);
-
-            $exitedEmployee = $employees->last();
-            EmployeeExit::create([
-                'employee_id' => $exitedEmployee->id,
-                'full_name' => $exitedEmployee->full_name,
-                'position_id' => $exitedEmployee->position_id,
-                'department_id' => $exitedEmployee->department_id,
-                'site_id' => $site->id,
-                'entry_date' => $exitedEmployee->entry_date,
-                'exit_date' => now()->subDays(2),
-                'reason' => 'Fin de contrat',
-            ]);
-            $exitedEmployee->update(['status' => 'sorti', 'exit_date' => now()->subDays(2)]);
 
             for ($i = 0; $i < 5; $i++) {
                 $ledger->create($cashAccount, [
