@@ -55,7 +55,7 @@ export interface Employee {
 }
 
 export type AttendanceStatus = 'present' | 'absent';
-export type AbsenceCause = 'maladie' | 'autorisee' | 'non_autorisee' | 'justifie' | 'conge';
+export type AbsenceCause = 'maladie' | 'autorisee' | 'non_autorisee' | 'conge' | 'mise_a_pied';
 
 export interface Attendance {
   id: number;
@@ -263,7 +263,7 @@ export interface DashboardData {
     absent_maladie: number;
     absent_autorisee: number;
     absent_non_autorisee: number;
-    absent_justifie: number;
+    absent_mise_a_pied: number;
     absent_conge: number;
   };
   leaves: {

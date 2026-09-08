@@ -9,6 +9,7 @@ import { useUrlTab } from '../hooks/useUrlTab';
 import type { DisciplinaryWarning, Employee, Paginated, Suspension } from '../types';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Button';
+import { SearchInput } from '../components/ui/SearchInput';
 import { DataTable, type Column } from '../components/ui/DataTable';
 import { Pagination } from '../components/ui/Pagination';
 import { Modal } from '../components/ui/Modal';
@@ -21,21 +22,25 @@ const tabs = ['Avertissements', 'Mises à pied'] as const;
 export default function SanctionsPage() {
   const [tab, setTab] = useUrlTab(tabs, 'Avertissements');
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [deleting, setDeleting] = useState<{ type: 'warning' | 'suspension'; id: number } | null>(null);
   const siteParams = useSiteParams();
   const queryClient = useQueryClient();
 
   const warningsQuery = useQuery({
-    queryKey: ['disciplinary-warnings', siteParams, page],
+    queryKey: ['disciplinary-warnings', siteParams, page, search],
     queryFn: () =>
-      api.get<Paginated<DisciplinaryWarning>>('/disciplinary-warnings', { params: { ...siteParams, page } }).then((r) => r.data),
+      api
+        .get<Paginated<DisciplinaryWarning>>('/disciplinary-warnings', { params: { ...siteParams, page, search: search || undefined } })
+        .then((r) => r.data),
     enabled: tab === 'Avertissements',
   });
 
   const suspensionsQuery = useQuery({
-    queryKey: ['suspensions', siteParams, page],
-    queryFn: () => api.get<Paginated<Suspension>>('/suspensions', { params: { ...siteParams, page } }).then((r) => r.data),
+    queryKey: ['suspensions', siteParams, page, search],
+    queryFn: () =>
+      api.get<Paginated<Suspension>>('/suspensions', { params: { ...siteParams, page, search: search || undefined } }).then((r) => r.data),
     enabled: tab === 'Mises à pied',
   });
 
@@ -111,6 +116,10 @@ export default function SanctionsPage() {
             {t}
           </button>
         ))}
+      </div>
+
+      <div className="mb-4 w-64">
+        <SearchInput placeholder="Rechercher par nom..." value={search} onChange={(e) => (setSearch(e.target.value), setPage(1))} />
       </div>
 
       {tab === 'Avertissements' ? (

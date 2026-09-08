@@ -16,7 +16,6 @@ const map: Record<string, { label: string; color: keyof typeof palettes }> = {
   maladie: { label: 'Maladie', color: 'amber' },
   autorisee: { label: 'Autorisée', color: 'blue' },
   non_autorisee: { label: 'Non autorisée', color: 'red' },
-  justifie: { label: 'Justifié', color: 'teal' },
   conge: { label: 'Congé', color: 'purple' },
   en_attente: { label: 'En attente', color: 'amber' },
   acceptee: { label: 'Acceptée', color: 'green' },

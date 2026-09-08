@@ -18,6 +18,10 @@ class ExitController extends Controller
         $query = EmployeeExit::with(['employee', 'site', 'department', 'position']);
         $this->scopeToSite($query, $request);
 
+        if ($search = $request->query('search')) {
+            $query->where('full_name', 'like', "%{$search}%");
+        }
+
         return $query->orderByDesc('exit_date')->paginate($request->integer('per_page', 15));
     }
 

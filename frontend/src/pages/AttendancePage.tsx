@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { UserX, Pencil } from 'lucide-react';
-import { api, apiErrorMessage } from '../api/client';
+import { UserX, Pencil, Download } from 'lucide-react';
+import { api, apiErrorMessage, downloadFile } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
 import type { AbsenceCause, DailyAttendanceRow } from '../types';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Button';
+import { SearchInput } from '../components/ui/SearchInput';
 import { LoadingState, EmptyState } from '../components/ui/States';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { Modal } from '../components/ui/Modal';
@@ -16,20 +17,31 @@ const causeLabels: Record<AbsenceCause, string> = {
   maladie: 'Maladie',
   autorisee: 'Autorisée',
   non_autorisee: 'Non autorisée',
-  justifie: 'Justifié',
   conge: 'Congé',
+  mise_a_pied: 'Mise à pied',
 };
 
 export default function AttendancePage() {
   const siteParams = useSiteParams();
   const queryClient = useQueryClient();
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [selected, setSelected] = useState<number[]>([]);
   const [absenceTarget, setAbsenceTarget] = useState<DailyAttendanceRow | DailyAttendanceRow[] | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['attendance-daily', siteParams, date],
-    queryFn: () => api.get<DailyAttendanceRow[]>('/attendance/daily', { params: { ...siteParams, date } }).then((r) => r.data),
+    queryKey: ['attendance-daily', siteParams, date, search, statusFilter],
+    queryFn: () =>
+      api
+        .get<DailyAttendanceRow[]>('/attendance/daily', { params: { ...siteParams, date, search: search || undefined, status: statusFilter || undefined } })
+        .then((r) => r.data),
+  });
+
+  const exportMutation = useMutation({
+    mutationFn: () =>
+      downloadFile('/reports/attendance/export', { ...siteParams, date_from: date, date_to: date, search: search || undefined, status: statusFilter || undefined }, 'pointage.xlsx'),
+    onError: (err) => toast.error(apiErrorMessage(err, "Échec de l'export.")),
   });
 
   const markPresent = useMutation({
@@ -59,12 +71,29 @@ export default function AttendancePage() {
       <PageHeader title="Pointage" description="Pointage quotidien des présences et absences" />
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => (setDate(e.target.value), setSelected([]))}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-        />
+        <div className="flex flex-wrap items-center gap-3">
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => (setDate(e.target.value), setSelected([]))}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+          />
+          <div className="w-56">
+            <SearchInput placeholder="Rechercher un employé..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+          >
+            <option value="">Tous</option>
+            <option value="present">Présents</option>
+            <option value="absent">Absents</option>
+          </select>
+          <Button variant="secondary" onClick={() => exportMutation.mutate()} disabled={exportMutation.isPending}>
+            <Download size={16} /> {exportMutation.isPending ? 'Export en cours...' : 'Export Excel'}
+          </Button>
+        </div>
         {selected.length > 0 && (
           <div className="flex items-center gap-2">
             <span className="text-sm text-slate-500 dark:text-slate-400">{selected.length} sélectionné(s)</span>
@@ -230,8 +259,8 @@ function AbsenceModal({
           <option value="maladie">Maladie</option>
           <option value="autorisee">Autorisée</option>
           <option value="non_autorisee">Non autorisée</option>
-          <option value="justifie">Justifié</option>
           <option value="conge">Congé</option>
+          <option value="mise_a_pied">Mise à pied</option>
         </SelectField>
         <TextAreaField
           label="Description / détail"

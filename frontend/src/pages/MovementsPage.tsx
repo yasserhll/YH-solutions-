@@ -11,6 +11,7 @@ import { useAuth } from '../contexts/AuthContext';
 import type { Employee, Entry, Exit, Paginated } from '../types';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Button';
+import { SearchInput } from '../components/ui/SearchInput';
 import { DataTable, type Column } from '../components/ui/DataTable';
 import { Pagination } from '../components/ui/Pagination';
 import { Modal } from '../components/ui/Modal';
@@ -23,6 +24,7 @@ const tabs = ['Entrées', 'Sorties'] as const;
 export default function MovementsPage() {
   const [tab, setTab] = useUrlTab(tabs, 'Entrées');
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
   const [editingExit, setEditingExit] = useState<Exit | null>(null);
@@ -32,14 +34,14 @@ export default function MovementsPage() {
   const queryClient = useQueryClient();
 
   const entriesQuery = useQuery({
-    queryKey: ['entries', siteParams, page],
-    queryFn: () => api.get<Paginated<Entry>>('/entries', { params: { ...siteParams, page } }).then((r) => r.data),
+    queryKey: ['entries', siteParams, page, search],
+    queryFn: () => api.get<Paginated<Entry>>('/entries', { params: { ...siteParams, page, search: search || undefined } }).then((r) => r.data),
     enabled: tab === 'Entrées',
   });
 
   const exitsQuery = useQuery({
-    queryKey: ['exits', siteParams, page],
-    queryFn: () => api.get<Paginated<Exit>>('/exits', { params: { ...siteParams, page } }).then((r) => r.data),
+    queryKey: ['exits', siteParams, page, search],
+    queryFn: () => api.get<Paginated<Exit>>('/exits', { params: { ...siteParams, page, search: search || undefined } }).then((r) => r.data),
     enabled: tab === 'Sorties',
   });
 
@@ -134,6 +136,10 @@ export default function MovementsPage() {
             {t}
           </button>
         ))}
+      </div>
+
+      <div className="mb-4 w-64">
+        <SearchInput placeholder="Rechercher par nom..." value={search} onChange={(e) => (setSearch(e.target.value), setPage(1))} />
       </div>
 
       {tab === 'Entrées' ? (

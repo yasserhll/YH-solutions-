@@ -78,6 +78,9 @@ class ReportController extends Controller
         if ($cause = $request->query('absence_cause')) {
             $query->where('absence_cause', $cause);
         }
+        if ($search = $request->query('search')) {
+            $query->whereHas('employee', fn ($q) => $q->where('full_name', 'like', "%{$search}%"));
+        }
 
         return $query->orderByDesc('date');
     }
@@ -116,6 +119,9 @@ class ReportController extends Controller
         }
         if ($status = $request->query('status')) {
             $query->where('status', $status);
+        }
+        if ($search = $request->query('search')) {
+            $query->whereHas('employee', fn ($q) => $q->where('full_name', 'like', "%{$search}%"));
         }
 
         return $query->orderByDesc('request_date');

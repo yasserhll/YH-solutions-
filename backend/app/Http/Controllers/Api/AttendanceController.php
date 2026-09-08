@@ -35,20 +35,31 @@ class AttendanceController extends Controller
         if ($cause = $request->query('absence_cause')) {
             $query->where('absence_cause', $cause);
         }
+        if ($search = $request->query('search')) {
+            $query->whereHas('employee', fn ($q) => $q->where('full_name', 'like', "%{$search}%"));
+        }
 
         return $query->orderByDesc('date')->paginate($request->integer('per_page', 20));
     }
 
     /**
      * Daily sheet: every employee of the scoped site(s) for a given date,
-     * defaulting to "present" when no record exists yet for that day.
+     * defaulting to "present" when no record exists yet for that day. Rows
+     * are sorted absent-first (then present), so the people who need
+     * attention today aren't buried below a long list of already-present
+     * employees.
      */
     public function daily(Request $request)
     {
         $date = $request->query('date', now()->toDateString());
+        $search = $request->query('search');
+        $statusFilter = $request->query('status'); // 'present' | 'absent' | null (= tous)
 
         $employeesQuery = Employee::where('status', 'actif')->with('site');
         $this->scopeToSite($employeesQuery, $request);
+        if ($search) {
+            $employeesQuery->where('full_name', 'like', "%{$search}%");
+        }
         $employees = $employeesQuery->orderBy('full_name')->get();
 
         $attendances = Attendance::whereDate('date', $date)
@@ -56,7 +67,7 @@ class AttendanceController extends Controller
             ->get()
             ->keyBy('employee_id');
 
-        return $employees->map(function (Employee $employee) use ($attendances, $date) {
+        $rows = $employees->map(function (Employee $employee) use ($attendances, $date) {
             $attendance = $attendances->get($employee->id);
 
             return [
@@ -70,6 +81,17 @@ class AttendanceController extends Controller
                 'description' => $attendance?->description,
             ];
         });
+
+        if (in_array($statusFilter, ['present', 'absent'], true)) {
+            $rows = $rows->where('status', $statusFilter);
+        }
+
+        return $rows
+            ->sortBy([
+                fn ($a, $b) => ($b['status'] === 'absent') <=> ($a['status'] === 'absent'),
+                fn ($a, $b) => $a['full_name'] <=> $b['full_name'],
+            ])
+            ->values();
     }
 
     public function store(StoreAttendanceRequest $request)
@@ -100,7 +122,7 @@ class AttendanceController extends Controller
             'employee_ids' => ['required', 'array', 'min:1'],
             'employee_ids.*' => ['exists:employees,id'],
             'status' => ['required', Rule::in(['present', 'absent'])],
-            'absence_cause' => ['required_if:status,absent', 'nullable', Rule::in(['maladie', 'autorisee', 'non_autorisee', 'justifie', 'conge'])],
+            'absence_cause' => ['required_if:status,absent', 'nullable', Rule::in(['maladie', 'autorisee', 'non_autorisee', 'conge', 'mise_a_pied'])],
             'description' => ['nullable', 'string'],
         ]);
 

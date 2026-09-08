@@ -8,6 +8,7 @@ import { useDepartments, usePositions } from '../hooks/useReferenceData';
 import type { Assignment, Employee, Paginated } from '../types';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Button';
+import { SearchInput } from '../components/ui/SearchInput';
 import { DataTable, type Column } from '../components/ui/DataTable';
 import { Pagination } from '../components/ui/Pagination';
 import { StatusBadge } from '../components/ui/StatusBadge';
@@ -18,6 +19,7 @@ import { EmployeeSelect } from '../components/ui/EmployeeSelect';
 
 export default function AssignmentsPage() {
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
   const [departmentId, setDepartmentId] = useState('');
   const [positionId, setPositionId] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -29,11 +31,11 @@ export default function AssignmentsPage() {
   const { data: positions } = usePositions();
 
   const { data, isLoading } = useQuery({
-    queryKey: ['assignments', siteParams, page, departmentId, positionId],
+    queryKey: ['assignments', siteParams, page, search, departmentId, positionId],
     queryFn: () =>
       api
         .get<Paginated<Assignment>>('/assignments', {
-          params: { ...siteParams, page, department_id: departmentId || undefined, position_id: positionId || undefined },
+          params: { ...siteParams, page, search: search || undefined, department_id: departmentId || undefined, position_id: positionId || undefined },
         })
         .then((r) => r.data),
   });
@@ -84,6 +86,9 @@ export default function AssignmentsPage() {
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="w-64">
+          <SearchInput placeholder="Rechercher par nom..." value={search} onChange={(e) => (setSearch(e.target.value), setPage(1))} />
+        </div>
         <select
           value={departmentId}
           onChange={(e) => (setDepartmentId(e.target.value), setPage(1))}

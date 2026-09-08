@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Plus, Plane } from 'lucide-react';
+import { Plus, Plane, Pencil, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 import { api, apiErrorMessage } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
@@ -9,10 +9,12 @@ import { useUrlTab } from '../hooks/useUrlTab';
 import type { Employee, Leave, LeaveRequest, LeaveRequestStatus, Paginated } from '../types';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Button';
+import { SearchInput } from '../components/ui/SearchInput';
 import { DataTable, type Column } from '../components/ui/DataTable';
 import { Pagination } from '../components/ui/Pagination';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { Modal } from '../components/ui/Modal';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { TextAreaField, TextField } from '../components/ui/Field';
 import { EmployeeSelect } from '../components/ui/EmployeeSelect';
 
@@ -21,21 +23,27 @@ const tabs = ['Demandes', 'Congés en cours'] as const;
 export default function LeavesPage() {
   const [tab, setTab] = useUrlTab(tabs, 'Demandes');
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
   const [showRequestForm, setShowRequestForm] = useState(false);
   const [showLeaveForm, setShowLeaveForm] = useState(false);
+  const [editingRequest, setEditingRequest] = useState<LeaveRequest | null>(null);
+  const [editingLeave, setEditingLeave] = useState<Leave | null>(null);
+  const [deletingRequest, setDeletingRequest] = useState<LeaveRequest | null>(null);
+  const [deletingLeave, setDeletingLeave] = useState<Leave | null>(null);
   const [extendingLeave, setExtendingLeave] = useState<Leave | null>(null);
   const siteParams = useSiteParams();
   const queryClient = useQueryClient();
 
   const requestsQuery = useQuery({
-    queryKey: ['leave-requests', siteParams, page],
-    queryFn: () => api.get<Paginated<LeaveRequest>>('/leave-requests', { params: { ...siteParams, page } }).then((r) => r.data),
+    queryKey: ['leave-requests', siteParams, page, search],
+    queryFn: () =>
+      api.get<Paginated<LeaveRequest>>('/leave-requests', { params: { ...siteParams, page, search: search || undefined } }).then((r) => r.data),
     enabled: tab === 'Demandes',
   });
 
   const leavesQuery = useQuery({
-    queryKey: ['leaves', siteParams, page],
-    queryFn: () => api.get<Paginated<Leave>>('/leaves', { params: { ...siteParams, page } }).then((r) => r.data),
+    queryKey: ['leaves', siteParams, page, search],
+    queryFn: () => api.get<Paginated<Leave>>('/leaves', { params: { ...siteParams, page, search: search || undefined } }).then((r) => r.data),
     enabled: tab === 'Congés en cours',
   });
 
@@ -44,6 +52,26 @@ export default function LeavesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['leave-requests'] });
       toast.success('Statut mis à jour.');
+    },
+    onError: (err) => toast.error(apiErrorMessage(err)),
+  });
+
+  const deleteRequestMutation = useMutation({
+    mutationFn: (id: number) => api.delete(`/leave-requests/${id}`),
+    onSuccess: () => {
+      toast.success('Demande supprimée.');
+      queryClient.invalidateQueries({ queryKey: ['leave-requests'] });
+      setDeletingRequest(null);
+    },
+    onError: (err) => toast.error(apiErrorMessage(err)),
+  });
+
+  const deleteLeaveMutation = useMutation({
+    mutationFn: (id: number) => api.delete(`/leaves/${id}`),
+    onSuccess: () => {
+      toast.success('Congé supprimé.');
+      queryClient.invalidateQueries({ queryKey: ['leaves'] });
+      setDeletingLeave(null);
     },
     onError: (err) => toast.error(apiErrorMessage(err)),
   });
@@ -73,6 +101,19 @@ export default function LeavesPage() {
           <StatusBadge status={r.status} />
         ),
     },
+    {
+      header: 'Actions',
+      accessor: (r) => (
+        <div className="flex items-center gap-1">
+          <button className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => setEditingRequest(r)}>
+            <Pencil size={16} />
+          </button>
+          <button className="rounded-md p-1.5 text-red-500 hover:bg-red-50" onClick={() => setDeletingRequest(r)}>
+            <Trash2 size={16} />
+          </button>
+        </div>
+      ),
+    },
   ];
 
   const leaveColumns: Column<Leave>[] = [
@@ -85,9 +126,17 @@ export default function LeavesPage() {
     {
       header: 'Actions',
       accessor: (l) => (
-        <Button size="sm" variant="secondary" onClick={() => setExtendingLeave(l)}>
-          <Plane size={14} /> Prolonger
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button size="sm" variant="secondary" onClick={() => setExtendingLeave(l)}>
+            <Plane size={14} /> Prolonger
+          </Button>
+          <button className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => setEditingLeave(l)}>
+            <Pencil size={16} />
+          </button>
+          <button className="rounded-md p-1.5 text-red-500 hover:bg-red-50" onClick={() => setDeletingLeave(l)}>
+            <Trash2 size={16} />
+          </button>
+        </div>
       ),
     },
   ];
@@ -127,6 +176,10 @@ export default function LeavesPage() {
         ))}
       </div>
 
+      <div className="mb-4 w-64">
+        <SearchInput placeholder="Rechercher par nom..." value={search} onChange={(e) => (setSearch(e.target.value), setPage(1))} />
+      </div>
+
       {tab === 'Demandes' ? (
         <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
           <DataTable
@@ -158,27 +211,51 @@ export default function LeavesPage() {
         </div>
       )}
 
-      {showRequestForm && <LeaveRequestFormModal onClose={() => setShowRequestForm(false)} />}
-      {showLeaveForm && <LeaveFormModal onClose={() => setShowLeaveForm(false)} />}
+      {(showRequestForm || editingRequest) && (
+        <LeaveRequestFormModal request={editingRequest} onClose={() => (setShowRequestForm(false), setEditingRequest(null))} />
+      )}
+      {(showLeaveForm || editingLeave) && (
+        <LeaveFormModal leave={editingLeave} onClose={() => (setShowLeaveForm(false), setEditingLeave(null))} />
+      )}
       {extendingLeave && <ExtendLeaveModal leave={extendingLeave} onClose={() => setExtendingLeave(null)} />}
+
+      <ConfirmDialog
+        open={!!deletingRequest}
+        title="Supprimer la demande"
+        message="Voulez-vous vraiment supprimer cette demande de congé ?"
+        onCancel={() => setDeletingRequest(null)}
+        onConfirm={() => deletingRequest && deleteRequestMutation.mutate(deletingRequest.id)}
+        isLoading={deleteRequestMutation.isPending}
+      />
+      <ConfirmDialog
+        open={!!deletingLeave}
+        title="Supprimer le congé"
+        message="Voulez-vous vraiment supprimer ce congé ?"
+        onCancel={() => setDeletingLeave(null)}
+        onConfirm={() => deletingLeave && deleteLeaveMutation.mutate(deletingLeave.id)}
+        isLoading={deleteLeaveMutation.isPending}
+      />
     </div>
   );
 }
 
-function LeaveRequestFormModal({ onClose }: { onClose: () => void }) {
+function LeaveRequestFormModal({ request, onClose }: { request: LeaveRequest | null; onClose: () => void }) {
   const queryClient = useQueryClient();
-  const [employee, setEmployee] = useState<Employee | null>(null);
+  const [employee, setEmployee] = useState<Employee | null>(request?.employee ?? null);
   const [form, setForm] = useState({
-    request_date: new Date().toISOString().slice(0, 10),
-    desired_start_date: '',
-    duration_days: 1,
-    reason: '',
+    request_date: request?.request_date?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
+    desired_start_date: request?.desired_start_date?.slice(0, 10) ?? '',
+    duration_days: request?.duration_days ?? 1,
+    reason: request?.reason ?? '',
   });
 
   const mutation = useMutation({
-    mutationFn: () => api.post('/leave-requests', { ...form, employee_id: employee?.id }),
+    mutationFn: (): Promise<unknown> =>
+      request
+        ? api.put(`/leave-requests/${request.id}`, { ...form, employee_id: request.employee_id })
+        : api.post('/leave-requests', { ...form, employee_id: employee?.id }),
     onSuccess: () => {
-      toast.success('Demande enregistrée.');
+      toast.success(request ? 'Demande mise à jour.' : 'Demande enregistrée.');
       queryClient.invalidateQueries({ queryKey: ['leave-requests'] });
       onClose();
     },
@@ -186,7 +263,7 @@ function LeaveRequestFormModal({ onClose }: { onClose: () => void }) {
   });
 
   return (
-    <Modal open onClose={onClose} title="Nouvelle demande de congé">
+    <Modal open onClose={onClose} title={request ? 'Modifier la demande de congé' : 'Nouvelle demande de congé'}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -194,7 +271,13 @@ function LeaveRequestFormModal({ onClose }: { onClose: () => void }) {
         }}
         className="space-y-4"
       >
-        <EmployeeSelect value={employee?.id ?? null} onChange={setEmployee} />
+        {request ? (
+          <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+            {request.employee?.full_name}
+          </div>
+        ) : (
+          <EmployeeSelect value={employee?.id ?? null} onChange={setEmployee} />
+        )}
         <div className="grid grid-cols-2 gap-4">
           <TextField
             label="Date de demande"
@@ -224,7 +307,7 @@ function LeaveRequestFormModal({ onClose }: { onClose: () => void }) {
           <Button type="button" variant="secondary" onClick={onClose}>
             Annuler
           </Button>
-          <Button type="submit" disabled={!employee || mutation.isPending}>
+          <Button type="submit" disabled={(!request && !employee) || mutation.isPending}>
             Enregistrer
           </Button>
         </div>
@@ -233,19 +316,22 @@ function LeaveRequestFormModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function LeaveFormModal({ onClose }: { onClose: () => void }) {
+function LeaveFormModal({ leave, onClose }: { leave: Leave | null; onClose: () => void }) {
   const queryClient = useQueryClient();
-  const [employee, setEmployee] = useState<Employee | null>(null);
+  const [employee, setEmployee] = useState<Employee | null>(leave?.employee ?? null);
   const [form, setForm] = useState({
-    start_date: new Date().toISOString().slice(0, 10),
-    duration_days: 1,
-    reason: '',
+    start_date: leave?.start_date?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
+    duration_days: leave?.duration_days ?? 1,
+    reason: leave?.reason ?? '',
   });
 
   const mutation = useMutation({
-    mutationFn: () => api.post('/leaves', { ...form, employee_id: employee?.id }),
+    mutationFn: (): Promise<unknown> =>
+      leave
+        ? api.put(`/leaves/${leave.id}`, { ...form, employee_id: leave.employee_id })
+        : api.post('/leaves', { ...form, employee_id: employee?.id }),
     onSuccess: () => {
-      toast.success('Congé déclaré.');
+      toast.success(leave ? 'Congé mis à jour.' : 'Congé déclaré.');
       queryClient.invalidateQueries({ queryKey: ['leaves'] });
       onClose();
     },
@@ -253,7 +339,7 @@ function LeaveFormModal({ onClose }: { onClose: () => void }) {
   });
 
   return (
-    <Modal open onClose={onClose} title="Déclarer un départ en congé">
+    <Modal open onClose={onClose} title={leave ? 'Modifier le congé' : 'Déclarer un départ en congé'}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -261,7 +347,13 @@ function LeaveFormModal({ onClose }: { onClose: () => void }) {
         }}
         className="space-y-4"
       >
-        <EmployeeSelect value={employee?.id ?? null} onChange={setEmployee} />
+        {leave ? (
+          <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+            {leave.employee?.full_name}
+          </div>
+        ) : (
+          <EmployeeSelect value={employee?.id ?? null} onChange={setEmployee} />
+        )}
         <div className="grid grid-cols-2 gap-4">
           <TextField
             label="Date de début"
@@ -284,7 +376,7 @@ function LeaveFormModal({ onClose }: { onClose: () => void }) {
           <Button type="button" variant="secondary" onClick={onClose}>
             Annuler
           </Button>
-          <Button type="submit" disabled={!employee || mutation.isPending}>
+          <Button type="submit" disabled={(!leave && !employee) || mutation.isPending}>
             Enregistrer
           </Button>
         </div>

@@ -21,6 +21,9 @@ class SuspensionController extends Controller
         if ($employeeId = $request->query('employee_id')) {
             $query->where('employee_id', $employeeId);
         }
+        if ($search = $request->query('search')) {
+            $query->whereHas('employee', fn ($q) => $q->where('full_name', 'like', "%{$search}%"));
+        }
 
         return $query->orderByDesc('date')->paginate($request->integer('per_page', 15));
     }

@@ -27,6 +27,9 @@ class AssignmentController extends Controller
         if ($positionId = $request->query('position_id')) {
             $query->where('position_id', $positionId);
         }
+        if ($search = $request->query('search')) {
+            $query->whereHas('employee', fn ($q) => $q->where('full_name', 'like', "%{$search}%"));
+        }
 
         return $query->orderByDesc('start_date')->paginate($request->integer('per_page', 15));
     }
