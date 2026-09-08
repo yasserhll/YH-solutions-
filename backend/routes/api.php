@@ -43,7 +43,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/leaves/{leave}/extensions', [LeaveController::class, 'extend']);
     Route::patch('/leaves/{leave}/status', [LeaveController::class, 'updateStatus']);
-    Route::apiResource('leaves', LeaveController::class)->except(['show']);
+    Route::apiResource('leaves', LeaveController::class)->except(['show'])->parameters(['leaves' => 'leave']);
 
     Route::apiResource('disciplinary-warnings', DisciplinaryWarningController::class)->except(['show']);
     Route::apiResource('suspensions', SuspensionController::class)->except(['show']);
