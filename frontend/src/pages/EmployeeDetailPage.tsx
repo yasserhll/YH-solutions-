@@ -31,9 +31,9 @@ export default function EmployeeDetailPage() {
         <ArrowLeft size={15} /> Retour au personnel
       </Link>
 
-      <div className="mb-6 flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
-        <div>
-          <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{employee.full_name}</h1>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
+        <div className="min-w-0">
+          <h1 className="truncate text-lg font-semibold text-slate-900 dark:text-slate-100">{employee.full_name}</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
             {employee.site?.name} · {employee.department?.name ?? '—'} · {employee.position?.name ?? '—'}
           </p>
@@ -41,13 +41,13 @@ export default function EmployeeDetailPage() {
         <StatusBadge status={employee.status} />
       </div>
 
-      <div className="mb-4 flex gap-1 border-b border-slate-200 dark:border-slate-800">
+      <div className="mb-4 flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800">
         {tabs.map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={clsx(
-              'border-b-2 px-4 py-2 text-sm font-medium',
+              'shrink-0 whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium',
               tab === t
                 ? 'border-slate-900 text-slate-900 dark:border-white dark:text-slate-100'
                 : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200',
@@ -98,28 +98,30 @@ function AttendanceTab({ employee }: { employee: Employee }) {
   if (rows.length === 0) return <p className="text-sm text-slate-400 dark:text-slate-500">Aucun pointage enregistré.</p>;
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-      <table className="w-full text-left text-sm">
-        <thead>
-          <tr className="border-b border-slate-200 dark:border-slate-800 text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500">
-            <th className="px-4 py-3 font-medium">Date</th>
-            <th className="px-4 py-3 font-medium">Statut</th>
-            <th className="px-4 py-3 font-medium">Cause</th>
-            <th className="px-4 py-3 font-medium">Description</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-          {rows.map((a) => (
-            <tr key={a.id}>
-              <td className="px-4 py-2.5">{new Date(a.date).toLocaleDateString('fr-FR')}</td>
-              <td className="px-4 py-2.5">
-                <StatusBadge status={a.status} />
-              </td>
-              <td className="px-4 py-2.5">{a.absence_cause ? <StatusBadge status={a.absence_cause} /> : '—'}</td>
-              <td className="px-4 py-2.5 text-slate-500 dark:text-slate-400">{a.description ?? '—'}</td>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[520px] text-left text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 dark:border-slate-800 text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500">
+              <th className="px-4 py-3 font-medium">Date</th>
+              <th className="px-4 py-3 font-medium">Statut</th>
+              <th className="px-4 py-3 font-medium">Cause</th>
+              <th className="px-4 py-3 font-medium">Description</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            {rows.map((a) => (
+              <tr key={a.id}>
+                <td className="px-4 py-2.5">{new Date(a.date).toLocaleDateString('fr-FR')}</td>
+                <td className="px-4 py-2.5">
+                  <StatusBadge status={a.status} />
+                </td>
+                <td className="px-4 py-2.5">{a.absence_cause ? <StatusBadge status={a.absence_cause} /> : '—'}</td>
+                <td className="px-4 py-2.5 text-slate-500 dark:text-slate-400">{a.description ?? '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -135,28 +137,30 @@ function LeavesTab({ employee }: { employee: Employee }) {
           <p className="text-sm text-slate-400 dark:text-slate-500">Aucune demande.</p>
         ) : (
           <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                  <th className="px-4 py-3 font-medium">Demande le</th>
-                  <th className="px-4 py-3 font-medium">Début souhaité</th>
-                  <th className="px-4 py-3 font-medium">Durée</th>
-                  <th className="px-4 py-3 font-medium">Statut</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {requests.map((r) => (
-                  <tr key={r.id}>
-                    <td className="px-4 py-2.5">{new Date(r.request_date).toLocaleDateString('fr-FR')}</td>
-                    <td className="px-4 py-2.5">{new Date(r.desired_start_date).toLocaleDateString('fr-FR')}</td>
-                    <td className="px-4 py-2.5">{r.duration_days} j</td>
-                    <td className="px-4 py-2.5">
-                      <StatusBadge status={r.status} />
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[480px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-800 text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                    <th className="px-4 py-3 font-medium">Demande le</th>
+                    <th className="px-4 py-3 font-medium">Début souhaité</th>
+                    <th className="px-4 py-3 font-medium">Durée</th>
+                    <th className="px-4 py-3 font-medium">Statut</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {requests.map((r) => (
+                    <tr key={r.id}>
+                      <td className="px-4 py-2.5">{new Date(r.request_date).toLocaleDateString('fr-FR')}</td>
+                      <td className="px-4 py-2.5">{new Date(r.desired_start_date).toLocaleDateString('fr-FR')}</td>
+                      <td className="px-4 py-2.5">{r.duration_days} j</td>
+                      <td className="px-4 py-2.5">
+                        <StatusBadge status={r.status} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
@@ -244,28 +248,30 @@ function AssignmentsTab({ employee }: { employee: Employee }) {
   if (rows.length === 0) return <p className="text-sm text-slate-400 dark:text-slate-500">Aucune affectation.</p>;
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-      <table className="w-full text-left text-sm">
-        <thead>
-          <tr className="border-b border-slate-200 dark:border-slate-800 text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500">
-            <th className="px-4 py-3 font-medium">Début</th>
-            <th className="px-4 py-3 font-medium">Fin</th>
-            <th className="px-4 py-3 font-medium">Département</th>
-            <th className="px-4 py-3 font-medium">Fonction</th>
-            <th className="px-4 py-3 font-medium">Actuelle</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-          {rows.map((a) => (
-            <tr key={a.id}>
-              <td className="px-4 py-2.5">{new Date(a.start_date).toLocaleDateString('fr-FR')}</td>
-              <td className="px-4 py-2.5">{a.end_date ? new Date(a.end_date).toLocaleDateString('fr-FR') : '—'}</td>
-              <td className="px-4 py-2.5">{a.department?.name ?? '—'}</td>
-              <td className="px-4 py-2.5">{a.position?.name ?? '—'}</td>
-              <td className="px-4 py-2.5">{a.is_current ? <StatusBadge status="actif" /> : '—'}</td>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[560px] text-left text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 dark:border-slate-800 text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500">
+              <th className="px-4 py-3 font-medium">Début</th>
+              <th className="px-4 py-3 font-medium">Fin</th>
+              <th className="px-4 py-3 font-medium">Département</th>
+              <th className="px-4 py-3 font-medium">Fonction</th>
+              <th className="px-4 py-3 font-medium">Actuelle</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            {rows.map((a) => (
+              <tr key={a.id}>
+                <td className="px-4 py-2.5">{new Date(a.start_date).toLocaleDateString('fr-FR')}</td>
+                <td className="px-4 py-2.5">{a.end_date ? new Date(a.end_date).toLocaleDateString('fr-FR') : '—'}</td>
+                <td className="px-4 py-2.5">{a.department?.name ?? '—'}</td>
+                <td className="px-4 py-2.5">{a.position?.name ?? '—'}</td>
+                <td className="px-4 py-2.5">{a.is_current ? <StatusBadge status="actif" /> : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

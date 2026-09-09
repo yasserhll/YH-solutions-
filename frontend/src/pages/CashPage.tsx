@@ -202,7 +202,7 @@ export default function CashPage() {
       )}
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="w-56">
+        <div className="w-full sm:w-56">
           <SearchInput
             placeholder="Rechercher une description..."
             value={search}

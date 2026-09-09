@@ -21,6 +21,8 @@ import type { DashboardData } from '../types';
 import { KpiCard } from '../components/ui/KpiCard';
 import { LoadingState } from '../components/ui/States';
 import { StatusBadge } from '../components/ui/StatusBadge';
+import { DonutStat } from '../components/ui/DonutStat';
+import { SegmentedBar } from '../components/ui/SegmentedBar';
 
 function money(n: number) {
   return new Intl.NumberFormat('fr-MA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n) + ' DH';
@@ -35,6 +37,16 @@ export default function DashboardPage() {
   });
 
   if (isLoading || !data) return <LoadingState rows={8} />;
+
+  const totalAbsentToday =
+    data.attendance.absent_maladie +
+    data.attendance.absent_autorisee +
+    data.attendance.absent_non_autorisee +
+    data.attendance.absent_mise_a_pied +
+    data.attendance.absent_conge;
+  const nonPointes = Math.max(data.personnel.total - data.attendance.present - totalAbsentToday, 0);
+
+  const totalMovements30d = data.personnel.new_employees_30d + data.personnel.recent_exits_30d;
 
   return (
     <div className="space-y-8">
@@ -144,6 +156,50 @@ export default function DashboardPage() {
       </div>
 
       <section>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+          Vue graphique
+        </h2>
+        <div className="grid gap-6 lg:grid-cols-2">
+          <DonutStat
+            title="Pointage du jour"
+            segments={[
+              { name: 'Présents', value: data.attendance.present, color: '#22c55e' },
+              { name: 'Absents', value: totalAbsentToday, color: '#ef4444' },
+              { name: 'Non pointés', value: nonPointes, color: '#94a3b8' },
+            ]}
+          />
+
+          <SegmentedBar
+            title="Congés"
+            subtitle={`${data.leaves.pending + data.leaves.accepted + data.leaves.in_progress + data.leaves.completed} dossiers suivis`}
+            segments={[
+              { name: 'En attente', value: data.leaves.pending, color: '#f59e0b' },
+              { name: 'Acceptés', value: data.leaves.accepted, color: '#22c55e' },
+              { name: 'En cours', value: data.leaves.in_progress, color: '#3b82f6' },
+              { name: 'Terminés', value: data.leaves.completed, color: '#94a3b8' },
+            ]}
+          />
+
+          <DonutStat
+            title="Sanctions"
+            segments={[
+              { name: 'Avertissements', value: data.sanctions.warnings, color: '#f59e0b' },
+              { name: 'Mises à pied', value: data.sanctions.suspensions, color: '#ef4444' },
+            ]}
+          />
+
+          <SegmentedBar
+            title="Mouvements de personnel"
+            subtitle={`${totalMovements30d} mouvements sur les 30 derniers jours`}
+            segments={[
+              { name: 'Nouveaux employés', value: data.personnel.new_employees_30d, color: '#3b82f6' },
+              { name: 'Sorties', value: data.personnel.recent_exits_30d, color: '#f59e0b' },
+            ]}
+          />
+        </div>
+      </section>
+
+      <section>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
             Dernières opérations de caisse
@@ -153,7 +209,8 @@ export default function DashboardPage() {
           </Link>
         </div>
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <table className="w-full text-left text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:text-slate-500">
                 <th className="px-4 py-3 font-medium">Date</th>
@@ -183,6 +240,7 @@ export default function DashboardPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       </section>
     </div>

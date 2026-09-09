@@ -159,13 +159,13 @@ export default function LeavesPage() {
         }
       />
 
-      <div className="mb-4 flex gap-1 border-b border-slate-200 dark:border-slate-800">
+      <div className="mb-4 flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800">
         {tabs.map((t) => (
           <button
             key={t}
             onClick={() => (setTab(t), setPage(1))}
             className={clsx(
-              'border-b-2 px-4 py-2 text-sm font-medium',
+              'shrink-0 whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium',
               tab === t
                 ? 'border-slate-900 text-slate-900 dark:border-white dark:text-slate-100'
                 : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200',
@@ -176,7 +176,7 @@ export default function LeavesPage() {
         ))}
       </div>
 
-      <div className="mb-4 w-64">
+      <div className="mb-4 w-full sm:w-64">
         <SearchInput placeholder="Rechercher par nom..." value={search} onChange={(e) => (setSearch(e.target.value), setPage(1))} />
       </div>
 
@@ -278,7 +278,7 @@ function LeaveRequestFormModal({ request, onClose }: { request: LeaveRequest | n
         ) : (
           <EmployeeSelect value={employee?.id ?? null} onChange={setEmployee} />
         )}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <TextField
             label="Date de demande"
             type="date"
@@ -354,7 +354,7 @@ function LeaveFormModal({ leave, onClose }: { leave: Leave | null; onClose: () =
         ) : (
           <EmployeeSelect value={employee?.id ?? null} onChange={setEmployee} />
         )}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <TextField
             label="Date de début"
             type="date"

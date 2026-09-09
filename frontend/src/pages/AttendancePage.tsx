@@ -78,7 +78,7 @@ export default function AttendancePage() {
             onChange={(e) => (setDate(e.target.value), setSelected([]))}
             className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
           />
-          <div className="w-56">
+          <div className="w-full sm:w-56">
             <SearchInput placeholder="Rechercher un employé..." value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <select
@@ -113,7 +113,8 @@ export default function AttendancePage() {
         ) : rows.length === 0 ? (
           <EmptyState message="Aucun employé actif pour ce site." />
         ) : (
-          <table className="w-full text-left text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-800 text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500">
                 <th className="w-10 px-4 py-3">
@@ -178,6 +179,7 @@ export default function AttendancePage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

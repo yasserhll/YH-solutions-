@@ -94,7 +94,7 @@ export default function PersonnelPage() {
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="w-64">
+        <div className="w-full sm:w-64">
           <SearchInput placeholder="Rechercher un employé..." value={search} onChange={(e) => (setSearch(e.target.value), setPage(1))} />
         </div>
         <select
@@ -176,7 +176,7 @@ function EmployeeFormModal({ employee, isSuperAdmin, onClose }: { employee: Empl
             ))}
           </SelectField>
         )}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <SelectField label="Département" value={form.department_id} onChange={(e) => setForm({ ...form, department_id: e.target.value })}>
             <option value="">—</option>
             {departments?.map((d) => (
@@ -194,7 +194,7 @@ function EmployeeFormModal({ employee, isSuperAdmin, onClose }: { employee: Empl
             ))}
           </SelectField>
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <TextField
             label="Date d'entrée"
             type="date"

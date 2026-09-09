@@ -19,6 +19,7 @@ import {
   X,
   LifeBuoy,
   MapPin,
+  ChevronDown,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../contexts/AuthContext';
@@ -184,6 +185,7 @@ export function DashboardLayout() {
 
 function SiteSwitcher({ sites }: { sites: Site[] }) {
   const { siteId, setSiteId } = useSiteFilter();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   function segmentClass(active: boolean) {
     return clsx(
@@ -194,17 +196,66 @@ function SiteSwitcher({ sites }: { sites: Site[] }) {
     );
   }
 
+  function optionClass(active: boolean) {
+    return clsx(
+      'block w-full px-3 py-2 text-left text-sm font-medium transition-colors',
+      active
+        ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+        : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700',
+    );
+  }
+
+  const currentLabel = siteId === null ? 'Tous' : (sites.find((s) => s.id === siteId)?.name ?? 'Tous');
+
   return (
-    <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-full bg-slate-100 py-1 pl-2 pr-1 dark:bg-slate-800">
-      <MapPin size={14} className="mr-0.5 shrink-0 text-orange-500" />
-      <button onClick={() => setSiteId(null)} className={segmentClass(siteId === null)}>
-        Tous
-      </button>
-      {sites.map((site) => (
-        <button key={site.id} onClick={() => setSiteId(site.id)} className={segmentClass(siteId === site.id)}>
-          {site.name}
+    <>
+      {/* Tablet/desktop: pill row, every site visible or reachable via scroll. */}
+      <div className="hidden max-w-full items-center gap-1 overflow-x-auto rounded-full bg-slate-100 py-1 pl-2 pr-1 dark:bg-slate-800 sm:flex">
+        <MapPin size={14} className="mr-0.5 shrink-0 text-orange-500" />
+        <button onClick={() => setSiteId(null)} className={segmentClass(siteId === null)}>
+          Tous
         </button>
-      ))}
-    </div>
+        {sites.map((site) => (
+          <button key={site.id} onClick={() => setSiteId(site.id)} className={segmentClass(siteId === site.id)}>
+            {site.name}
+          </button>
+        ))}
+      </div>
+
+      {/* Phone: a custom app-styled dropdown instead of a native <select> —
+          a native select renders with the OS's own chrome (light background,
+          system font), which looks out of place next to the rest of the UI
+          and ignores dark mode. Every site is still reachable in one tap,
+          with no horizontal scrolling needed to reveal the rest. */}
+      <div className="relative sm:hidden">
+        <button
+          type="button"
+          onClick={() => setMenuOpen((o) => !o)}
+          onBlur={() => setTimeout(() => setMenuOpen(false), 150)}
+          className="flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+        >
+          <MapPin size={14} className="shrink-0 text-orange-500" />
+          <span className="max-w-[6.5rem] truncate">{currentLabel}</span>
+          <ChevronDown size={14} className={clsx('shrink-0 text-slate-400 transition-transform', menuOpen && 'rotate-180')} />
+        </button>
+        {menuOpen && (
+          <div className="absolute right-0 z-20 mt-1.5 w-44 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+            <button type="button" onMouseDown={() => (setSiteId(null), setMenuOpen(false))} className={optionClass(siteId === null)}>
+              Tous
+            </button>
+            {sites.map((site) => (
+              <button
+                key={site.id}
+                type="button"
+                onMouseDown={() => (setSiteId(site.id), setMenuOpen(false))}
+                className={optionClass(siteId === site.id)}
+              >
+                {site.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
   );
 }

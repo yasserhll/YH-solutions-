@@ -86,7 +86,7 @@ export default function AssignmentsPage() {
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="w-64">
+        <div className="w-full sm:w-64">
           <SearchInput placeholder="Rechercher par nom..." value={search} onChange={(e) => (setSearch(e.target.value), setPage(1))} />
         </div>
         <select
@@ -180,7 +180,7 @@ function AssignmentFormModal({ assignment, onClose }: { assignment: Assignment |
         ) : (
           <EmployeeSelect value={employee?.id ?? null} onChange={setEmployee} />
         )}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <SelectField label="Département" value={form.department_id} onChange={(e) => setForm({ ...form, department_id: e.target.value })}>
             <option value="">—</option>
             {departments?.map((d) => (
