@@ -51,7 +51,7 @@ class ReportController extends Controller
         $user = $request->user();
 
         if (! $user->isSuperAdmin()) {
-            return $user->site ? Str::slug($user->site->name) : 'site';
+            return $user->activeSite ? Str::slug($user->activeSite->name) : 'site';
         }
 
         if ($siteId = $request->query('site_id')) {

@@ -40,7 +40,6 @@ class DatabaseSeeder extends Seeder
             'email' => 'admin@transwin-mining.com',
             'password' => Hash::make('password'),
             'role' => 'superadmin',
-            'site_id' => null,
         ]);
 
         $employeeNames = [
@@ -136,13 +135,14 @@ class DatabaseSeeder extends Seeder
                 'amount' => 2500,
             ]);
 
-            User::create([
+            $responsable = User::create([
                 'name' => 'Responsable '.$siteName,
                 'email' => 'responsable.'.Str::slug($siteName).'@transwin-mining.com',
                 'password' => Hash::make('password'),
                 'role' => 'responsable',
-                'site_id' => $site->id,
+                'active_site_id' => $site->id,
             ]);
+            $responsable->sites()->attach($site->id);
 
             if ($siteName === 'Louta') {
                 // Real roster: only Employee/Assignment/Entry rows, actif,

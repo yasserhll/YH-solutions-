@@ -47,16 +47,46 @@ class AuthController extends Controller
         return response()->json($this->present($request->user()));
     }
 
+    /**
+     * Switch a multi-site responsable's active site — the one site every
+     * scoped read/write is forced onto until they switch again (see
+     * InteractsWithSites::resolveSiteId/scopeToSite). A superadmin has no
+     * active site concept and never calls this.
+     */
+    public function updateActiveSite(Request $request)
+    {
+        $user = $request->user();
+
+        if ($user->isSuperAdmin()) {
+            throw new HttpException(422, "Un SuperAdmin n'a pas de site actif.");
+        }
+
+        $data = $request->validate([
+            'site_id' => ['required', 'integer'],
+        ]);
+
+        if (! $user->hasSiteAssigned($data['site_id'])) {
+            throw new HttpException(403, "Ce site ne vous est pas affecté.");
+        }
+
+        $user->update(['active_site_id' => $data['site_id']]);
+
+        return response()->json($this->present($user->fresh()));
+    }
+
     protected function present(User $user): array
     {
-        $user->loadMissing('site');
+        $user->loadMissing(['activeSite', 'sites']);
 
         return [
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
             'role' => $user->role,
-            'site' => $user->site ? ['id' => $user->site->id, 'name' => $user->site->name, 'slug' => $user->site->slug] : null,
+            'site' => $user->activeSite
+                ? ['id' => $user->activeSite->id, 'name' => $user->activeSite->name, 'slug' => $user->activeSite->slug]
+                : null,
+            'sites' => $user->sites->map(fn ($s) => ['id' => $s->id, 'name' => $s->name, 'slug' => $s->slug])->values(),
         ];
     }
 }

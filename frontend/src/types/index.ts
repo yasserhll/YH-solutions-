@@ -21,12 +21,14 @@ export interface AuthUser {
   name: string;
   email: string;
   role: Role;
+  /** The site this user is currently working in (their "active site"). */
   site: Site | null;
+  /** Every site this responsable is assigned to — a superadmin gets []. */
+  sites: Site[];
 }
 
 export interface User extends AuthUser {
   is_active: boolean;
-  site_id: number | null;
 }
 
 export type EmployeeStatus = 'actif' | 'sorti';

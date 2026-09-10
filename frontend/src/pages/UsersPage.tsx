@@ -37,7 +37,14 @@ export default function UsersPage() {
     { header: 'Nom', accessor: (u) => u.name },
     { header: 'Email', accessor: (u) => u.email },
     { header: 'Rôle', accessor: (u) => (u.role === 'superadmin' ? 'SuperAdmin' : 'Responsable de site') },
-    { header: 'Site', accessor: (u) => u.site?.name ?? '—' },
+    {
+      header: 'Site(s)',
+      accessor: (u) => {
+        if (u.sites.length === 0) return '—';
+        if (u.sites.length === 1) return u.sites[0].name;
+        return `${u.site?.name} (+${u.sites.length - 1})`;
+      },
+    },
     { header: 'Statut', accessor: (u) => <StatusBadge status={u.is_active ? 'actif' : 'sorti'} /> },
     {
       header: 'Actions',
@@ -95,9 +102,18 @@ function UserFormModal({ user, onClose }: { user: User | null; onClose: () => vo
     email: user?.email ?? '',
     password: '',
     role: (user?.role ?? 'responsable') as Role,
-    site_id: user?.site_id ?? '',
+    site_ids: user?.sites.map((s) => s.id) ?? ([] as number[]),
+    active_site_id: user?.site?.id ?? null,
     is_active: user?.is_active ?? true,
   });
+
+  function toggleSite(id: number) {
+    setForm((f) => {
+      const site_ids = f.site_ids.includes(id) ? f.site_ids.filter((x) => x !== id) : [...f.site_ids, id];
+      const active_site_id = site_ids.includes(f.active_site_id ?? -1) ? f.active_site_id : (site_ids[0] ?? null);
+      return { ...f, site_ids, active_site_id };
+    });
+  }
 
   const mutation = useMutation({
     mutationFn: () => (user ? api.put(`/users/${user.id}`, form) : api.post('/users', form)),
@@ -132,14 +148,41 @@ function UserFormModal({ user, onClose }: { user: User | null; onClose: () => vo
           <option value="superadmin">SuperAdmin</option>
         </SelectField>
         {form.role === 'responsable' && (
-          <SelectField label="Site" required value={form.site_id} onChange={(e) => setForm({ ...form, site_id: e.target.value })}>
-            <option value="">Sélectionner...</option>
-            {sites?.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </SelectField>
+          <>
+            <div>
+              <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+                Sites assignés {form.site_ids.length === 0 && <span className="text-red-500">(au moins un requis)</span>}
+              </span>
+              <div className="space-y-1.5 rounded-lg border border-slate-300 p-2.5 dark:border-slate-600">
+                {sites?.map((s) => (
+                  <label key={s.id} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                    <input type="checkbox" checked={form.site_ids.includes(s.id)} onChange={() => toggleSite(s.id)} />
+                    {s.name}
+                  </label>
+                ))}
+              </div>
+              <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                Un responsable avec plusieurs sites travaille sur un seul à la fois et peut basculer entre eux depuis l'application.
+              </p>
+            </div>
+            {form.site_ids.length > 1 && (
+              <SelectField
+                label="Site actif au départ"
+                required
+                value={form.active_site_id ?? ''}
+                onChange={(e) => setForm({ ...form, active_site_id: Number(e.target.value) })}
+              >
+                {form.site_ids.map((id) => {
+                  const site = sites?.find((s) => s.id === id);
+                  return site ? (
+                    <option key={id} value={id}>
+                      {site.name}
+                    </option>
+                  ) : null;
+                })}
+              </SelectField>
+            )}
+          </>
         )}
         <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
           <input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} />

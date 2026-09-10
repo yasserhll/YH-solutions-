@@ -34,11 +34,11 @@ class CashAccountController extends Controller
             ];
         }
 
-        abort_unless($user->site_id, 403, "Aucun site n'est affecté à cet utilisateur.");
+        abort_unless($user->active_site_id, 403, "Aucun site actif n'est sélectionné pour cet utilisateur.");
 
         return [
-            'site_id' => $user->site_id,
-            'site_balance' => CashTransaction::currentSiteBalance($user->site_id),
+            'site_id' => $user->active_site_id,
+            'site_balance' => CashTransaction::currentSiteBalance($user->active_site_id),
         ];
     }
 

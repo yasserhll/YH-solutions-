@@ -21,18 +21,20 @@ trait InteractsWithSites
 
     /**
      * The site id to use for a new record. A responsable is always forced onto
-     * their own site; a superadmin must explicitly provide one.
+     * their currently active site (see User::activeSite — a multi-site
+     * responsable switches this, but every write still targets exactly one
+     * site at a time); a superadmin must explicitly provide one.
      */
     protected function resolveSiteId(Request $request): int
     {
         $user = $this->currentUser($request);
 
         if (! $user->isSuperAdmin()) {
-            if (! $user->site_id) {
-                throw new HttpException(403, "Aucun site n'est affecté à cet utilisateur.");
+            if (! $user->active_site_id) {
+                throw new HttpException(403, "Aucun site actif n'est sélectionné pour cet utilisateur.");
             }
 
-            return $user->site_id;
+            return $user->active_site_id;
         }
 
         $siteId = (int) $request->input('site_id');
@@ -57,15 +59,15 @@ trait InteractsWithSites
     }
 
     /**
-     * Applies the site filter to a query: forced to the user's own site for a
-     * responsable, optional ?site_id= filter for a superadmin.
+     * Applies the site filter to a query: forced to the user's active site for
+     * a responsable, optional ?site_id= filter for a superadmin.
      */
     protected function scopeToSite(Builder $query, Request $request, string $column = 'site_id'): Builder
     {
         $user = $this->currentUser($request);
 
         if (! $user->isSuperAdmin()) {
-            return $query->where($column, $user->site_id);
+            return $query->where($column, $user->active_site_id);
         }
 
         if ($siteId = $request->query('site_id')) {

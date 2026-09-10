@@ -80,8 +80,8 @@ class DashboardController extends Controller
                 // Never reduced by a transfer — only entries/expenses move it.
                 'current_balance' => $isSuperAdmin ? round(CashAccount::singleton()->currentBalance(), 2) : null,
                 // A responsable's own site's remaining spending limit; SuperAdmin has no single "own site".
-                'site_balance' => (! $isSuperAdmin && $request->user()->site_id)
-                    ? CashTransaction::currentSiteBalance($request->user()->site_id)
+                'site_balance' => (! $isSuperAdmin && $request->user()->active_site_id)
+                    ? CashTransaction::currentSiteBalance($request->user()->active_site_id)
                     : null,
                 'expenses_today' => (float) (clone $this->scopeToSite(CashTransaction::query(), $request))
                     ->where('type', 'expense')->whereDate('date', $today)->sum('amount'),

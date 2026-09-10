@@ -49,7 +49,7 @@ class EmployeeController extends Controller
     public function store(StoreEmployeeRequest $request)
     {
         $data = $request->validated();
-        $data['site_id'] = $request->user()->isSuperAdmin() ? $data['site_id'] : $request->user()->site_id;
+        $data['site_id'] = $request->user()->isSuperAdmin() ? $data['site_id'] : $request->user()->active_site_id;
 
         $employee = Employee::create($data);
 
