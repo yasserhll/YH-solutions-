@@ -43,7 +43,8 @@ export default function DashboardPage() {
     data.attendance.absent_autorisee +
     data.attendance.absent_non_autorisee +
     data.attendance.absent_mise_a_pied +
-    data.attendance.absent_conge;
+    data.attendance.absent_conge +
+    data.attendance.absent_stc;
   const nonPointes = Math.max(data.personnel.total - data.attendance.present - totalAbsentToday, 0);
 
   const totalMovements30d = data.personnel.new_employees_30d + data.personnel.recent_exits_30d;
@@ -76,7 +77,7 @@ export default function DashboardPage() {
 
       <section>
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Pointage du jour</h2>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
           <KpiCard label="Présents" value={data.attendance.present} icon={UserCheck} tone="green" to="/pointage" />
           <KpiCard label="Absents maladie" value={data.attendance.absent_maladie} icon={UserX} tone="amber" to="/pointage" />
           <KpiCard label="Absents autorisée" value={data.attendance.absent_autorisee} icon={UserX} tone="blue" to="/pointage" />
@@ -89,6 +90,7 @@ export default function DashboardPage() {
             to="/pointage"
           />
           <KpiCard label="Absents en congé" value={data.attendance.absent_conge} icon={UserX} tone="purple" to="/pointage" />
+          <KpiCard label="STC (sorties)" value={data.attendance.absent_stc} icon={UserMinus} tone="slate" to="/mouvements?tab=sorties" />
         </div>
       </section>
 

@@ -64,6 +64,7 @@ class DashboardController extends Controller
                 'absent_non_autorisee' => (clone $attendanceToday)->where('absence_cause', 'non_autorisee')->count(),
                 'absent_mise_a_pied' => (clone $attendanceToday)->where('absence_cause', 'mise_a_pied')->count(),
                 'absent_conge' => (clone $attendanceToday)->where('absence_cause', 'conge')->count(),
+                'absent_stc' => (clone $attendanceToday)->where('absence_cause', 'stc')->count(),
             ],
             'leaves' => [
                 'pending' => (clone $leaveRequests)->where('status', 'en_attente')->count(),

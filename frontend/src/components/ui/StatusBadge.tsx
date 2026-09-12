@@ -27,6 +27,7 @@ const map: Record<string, { label: string; color: keyof typeof palettes }> = {
   sorti: { label: 'Sorti', color: 'gray' },
   avertissement: { label: 'Avertissement', color: 'amber' },
   mise_a_pied: { label: 'Mise à pied', color: 'red' },
+  stc: { label: 'STC', color: 'teal' },
   expense: { label: 'Dépense', color: 'red' },
   entry: { label: 'Entrée', color: 'green' },
   transfer: { label: 'Transfert', color: 'blue' },

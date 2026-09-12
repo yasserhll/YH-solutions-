@@ -5,9 +5,12 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Concerns\InteractsWithSites;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreAttendanceRequest;
+use App\Models\Assignment;
 use App\Models\Attendance;
 use App\Models\Employee;
+use App\Models\EmployeeExit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class AttendanceController extends Controller
@@ -55,7 +58,16 @@ class AttendanceController extends Controller
         $search = $request->query('search');
         $statusFilter = $request->query('status'); // 'present' | 'absent' | null (= tous)
 
-        $employeesQuery = Employee::where('status', 'actif')->with('site');
+        // A "sorti" employee still belongs on the sheet for their exit date and every
+        // day before it (their history, including the STC day itself, must stay
+        // visible) — only dates strictly after their exit_date drop them, since
+        // that's the point where they're no longer part of the workforce.
+        $employeesQuery = Employee::where(function ($q) use ($date) {
+            $q->where('status', 'actif')
+                ->orWhere(function ($q2) use ($date) {
+                    $q2->where('status', 'sorti')->whereDate('exit_date', '>=', $date);
+                });
+        })->with('site');
         $this->scopeToSite($employeesQuery, $request);
         if ($search) {
             $employeesQuery->where('full_name', 'like', "%{$search}%");
@@ -107,12 +119,56 @@ class AttendanceController extends Controller
             $data['description'] = null;
         }
 
-        $attendance = Attendance::updateOrCreate(
-            ['employee_id' => $data['employee_id'], 'date' => $data['date']],
-            $data
-        );
+        $attendance = DB::transaction(function () use ($data, $employee, $request) {
+            $attendance = Attendance::updateOrCreate(
+                ['employee_id' => $data['employee_id'], 'date' => $data['date']],
+                $data
+            );
+
+            if ($data['status'] === 'absent' && $data['absence_cause'] === 'stc') {
+                $this->recordStcExit($employee, $data['date'], $request);
+            }
+
+            return $attendance;
+        });
 
         return response()->json($attendance->load(['employee', 'site']), 201);
+    }
+
+    /**
+     * STC ("solde tout compte") marks the employee's final departure: the
+     * date entered becomes their exit_date, an EmployeeExit row is created
+     * so they show up under Entrées/Sorties, and their status flips to
+     * "sorti" so the daily sheet (which only lists status=actif employees)
+     * stops listing them from the following day onward. Every attendance
+     * row already on file — before and on the STC date — is left untouched.
+     */
+    private function recordStcExit(Employee $employee, string $date, Request $request): void
+    {
+        if ($employee->status === 'sorti') {
+            return;
+        }
+
+        EmployeeExit::create([
+            'employee_id' => $employee->id,
+            'full_name' => $employee->full_name,
+            'position_id' => $employee->position_id,
+            'department_id' => $employee->department_id,
+            'site_id' => $employee->site_id,
+            'entry_date' => $employee->entry_date,
+            'exit_date' => $date,
+            'reason' => 'STC',
+            'created_by' => $request->user()->id,
+        ]);
+
+        $employee->update(['status' => 'sorti', 'exit_date' => $date]);
+
+        // The Affectations page reads "actif" straight off the assignment's
+        // is_current flag, not the employee's own status — without this it
+        // would keep showing a departed employee's affectation as active.
+        Assignment::where('employee_id', $employee->id)
+            ->where('is_current', true)
+            ->update(['is_current' => false, 'end_date' => $date]);
     }
 
     public function bulkStore(Request $request)
@@ -122,7 +178,7 @@ class AttendanceController extends Controller
             'employee_ids' => ['required', 'array', 'min:1'],
             'employee_ids.*' => ['exists:employees,id'],
             'status' => ['required', Rule::in(['present', 'absent'])],
-            'absence_cause' => ['required_if:status,absent', 'nullable', Rule::in(['maladie', 'autorisee', 'non_autorisee', 'conge', 'mise_a_pied'])],
+            'absence_cause' => ['required_if:status,absent', 'nullable', Rule::in(['maladie', 'autorisee', 'non_autorisee', 'conge', 'mise_a_pied', 'stc'])],
             'description' => ['nullable', 'string'],
         ]);
 
@@ -132,17 +188,25 @@ class AttendanceController extends Controller
             $this->ensureSiteAccess($request, $employee->site_id);
         }
 
-        $results = $employees->map(function (Employee $employee) use ($data, $request) {
-            return Attendance::updateOrCreate(
-                ['employee_id' => $employee->id, 'date' => $data['date']],
-                [
-                    'site_id' => $employee->site_id,
-                    'status' => $data['status'],
-                    'absence_cause' => $data['status'] === 'absent' ? $data['absence_cause'] : null,
-                    'description' => $data['description'] ?? null,
-                    'created_by' => $request->user()->id,
-                ]
-            );
+        $results = DB::transaction(function () use ($employees, $data, $request) {
+            return $employees->map(function (Employee $employee) use ($data, $request) {
+                $attendance = Attendance::updateOrCreate(
+                    ['employee_id' => $employee->id, 'date' => $data['date']],
+                    [
+                        'site_id' => $employee->site_id,
+                        'status' => $data['status'],
+                        'absence_cause' => $data['status'] === 'absent' ? $data['absence_cause'] : null,
+                        'description' => $data['description'] ?? null,
+                        'created_by' => $request->user()->id,
+                    ]
+                );
+
+                if ($data['status'] === 'absent' && $data['absence_cause'] === 'stc') {
+                    $this->recordStcExit($employee, $data['date'], $request);
+                }
+
+                return $attendance;
+            });
         });
 
         return response()->json($results, 201);
@@ -157,7 +221,14 @@ class AttendanceController extends Controller
             $data['absence_cause'] = null;
             $data['description'] = null;
         }
-        $attendance->update($data);
+
+        DB::transaction(function () use ($data, $attendance, $request) {
+            $attendance->update($data);
+
+            if ($data['status'] === 'absent' && $data['absence_cause'] === 'stc') {
+                $this->recordStcExit($attendance->employee, $data['date'], $request);
+            }
+        });
 
         return $attendance->load(['employee', 'site']);
     }

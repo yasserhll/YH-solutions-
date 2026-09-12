@@ -19,6 +19,7 @@ const causeLabels: Record<AbsenceCause, string> = {
   non_autorisee: 'Non autorisée',
   conge: 'Congé',
   mise_a_pied: 'Mise à pied',
+  stc: 'STC (départ définitif)',
 };
 
 export default function AttendancePage() {
@@ -239,6 +240,10 @@ function AbsenceModal({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['attendance-daily'] });
+      if (cause === 'stc') {
+        queryClient.invalidateQueries({ queryKey: ['employees'] });
+        queryClient.invalidateQueries({ queryKey: ['exits'] });
+      }
       toast.success(isCorrection ? 'Absence mise à jour.' : 'Absence enregistrée.');
       onSaved();
     },
@@ -263,7 +268,14 @@ function AbsenceModal({
           <option value="non_autorisee">Non autorisée</option>
           <option value="conge">Congé</option>
           <option value="mise_a_pied">Mise à pied</option>
+          <option value="stc">STC (départ définitif)</option>
         </SelectField>
+        {cause === 'stc' && (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
+            La date sélectionnée sera enregistrée comme date de sortie. L'employé sera automatiquement marqué "Sorti" et
+            n'apparaîtra plus dans le pointage à partir du jour suivant.
+          </p>
+        )}
         <TextAreaField
           label="Description / détail"
           placeholder="Ex : Absence pour rendez-vous médical."
