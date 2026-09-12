@@ -9,6 +9,8 @@ use App\Models\Assignment;
 use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\EmployeeExit;
+use App\Models\Holiday;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -46,17 +48,26 @@ class AttendanceController extends Controller
     }
 
     /**
-     * Daily sheet: every employee of the scoped site(s) for a given date,
-     * defaulting to "present" when no record exists yet for that day. Rows
-     * are sorted absent-first (then present), so the people who need
-     * attention today aren't buried below a long list of already-present
-     * employees.
+     * Daily sheet: every employee of the scoped site(s) for a given date.
+     * The default status for an employee with no explicit record on that
+     * date depends on the day type: a normal Monday-Saturday day defaults
+     * to "present" (so a responsable only has to key in the exceptions —
+     * the absent people); a Sunday or a declared holiday flips the default
+     * to "absent" (so instead they only key in the exceptions — the people
+     * who actually came in). A holiday always wins over the weekday rule
+     * even if it falls on a day that would otherwise be worked. Rows are
+     * sorted absent-first (then present), so the people who need attention
+     * today aren't buried below a long list of already-present employees.
      */
     public function daily(Request $request)
     {
         $date = $request->query('date', now()->toDateString());
         $search = $request->query('search');
         $statusFilter = $request->query('status'); // 'present' | 'absent' | null (= tous)
+
+        $holiday = Holiday::whereDate('date', $date)->first();
+        $dayType = $holiday ? 'holiday' : (Carbon::parse($date)->isSunday() ? 'sunday' : 'normal');
+        $defaultStatus = $dayType === 'normal' ? 'present' : 'absent';
 
         // A "sorti" employee still belongs on the sheet for their exit date and every
         // day before it (their history, including the STC day itself, must stay
@@ -79,7 +90,7 @@ class AttendanceController extends Controller
             ->get()
             ->keyBy('employee_id');
 
-        $rows = $employees->map(function (Employee $employee) use ($attendances, $date) {
+        $rows = $employees->map(function (Employee $employee) use ($attendances, $date, $defaultStatus) {
             $attendance = $attendances->get($employee->id);
 
             return [
@@ -88,7 +99,7 @@ class AttendanceController extends Controller
                 'site' => $employee->site->name,
                 'date' => $date,
                 'attendance_id' => $attendance?->id,
-                'status' => $attendance?->status ?? 'present',
+                'status' => $attendance?->status ?? $defaultStatus,
                 'absence_cause' => $attendance?->absence_cause,
                 'description' => $attendance?->description,
             ];
@@ -98,12 +109,24 @@ class AttendanceController extends Controller
             $rows = $rows->where('status', $statusFilter);
         }
 
-        return $rows
+        // On a normal day almost everyone is present, so surfacing the few
+        // absences first is what needs attention. On a Sunday/holiday it's
+        // the reverse — almost everyone is absent by default, so the few
+        // people who actually showed up (marked present) belong on top.
+        $prioritizedStatus = $defaultStatus === 'present' ? 'absent' : 'present';
+        $rows = $rows
             ->sortBy([
-                fn ($a, $b) => ($b['status'] === 'absent') <=> ($a['status'] === 'absent'),
+                fn ($a, $b) => ($b['status'] === $prioritizedStatus) <=> ($a['status'] === $prioritizedStatus),
                 fn ($a, $b) => $a['full_name'] <=> $b['full_name'],
             ])
             ->values();
+
+        return response()->json([
+            'day_type' => $dayType,
+            'holiday_id' => $holiday?->id,
+            'holiday_name' => $holiday?->name,
+            'rows' => $rows,
+        ]);
     }
 
     public function store(StoreAttendanceRequest $request)

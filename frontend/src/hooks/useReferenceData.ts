@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
-import type { Department, Position, Site } from '../types';
+import type { Department, Holiday, Position, Site } from '../types';
 
 export function useSites() {
   return useQuery({ queryKey: ['sites'], queryFn: () => api.get<Site[]>('/sites').then((r) => r.data) });
@@ -12,4 +12,8 @@ export function useDepartments() {
 
 export function usePositions() {
   return useQuery({ queryKey: ['positions'], queryFn: () => api.get<Position[]>('/positions').then((r) => r.data) });
+}
+
+export function useHolidays() {
+  return useQuery({ queryKey: ['holidays'], queryFn: () => api.get<Holiday[]>('/holidays').then((r) => r.data) });
 }

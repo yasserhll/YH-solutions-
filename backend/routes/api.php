@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\DisciplinaryWarningController;
 use App\Http\Controllers\Api\EmployeeController;
 use App\Http\Controllers\Api\EntryController;
 use App\Http\Controllers\Api\ExitController;
+use App\Http\Controllers\Api\HolidayController;
 use App\Http\Controllers\Api\LeaveController;
 use App\Http\Controllers\Api\LeaveRequestController;
 use App\Http\Controllers\Api\PositionController;
@@ -32,6 +33,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/sites', [SiteController::class, 'index']);
     Route::get('/departments', [DepartmentController::class, 'index']);
     Route::get('/positions', [PositionController::class, 'index']);
+    Route::get('/holidays', [HolidayController::class, 'index']);
 
     Route::apiResource('employees', EmployeeController::class);
 
@@ -82,6 +84,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/positions', [PositionController::class, 'store']);
         Route::put('/positions/{position}', [PositionController::class, 'update']);
         Route::delete('/positions/{position}', [PositionController::class, 'destroy']);
+
+        Route::post('/holidays', [HolidayController::class, 'store']);
+        Route::put('/holidays/{holiday}', [HolidayController::class, 'update']);
+        Route::delete('/holidays/{holiday}', [HolidayController::class, 'destroy']);
 
         Route::apiResource('users', UserController::class)->except(['show']);
 

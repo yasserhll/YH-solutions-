@@ -16,6 +16,12 @@ export interface Position {
   name: string;
 }
 
+export interface Holiday {
+  id: number;
+  date: string;
+  name: string;
+}
+
 export interface AuthUser {
   id: number;
   name: string;
@@ -80,6 +86,15 @@ export interface DailyAttendanceRow {
   status: AttendanceStatus;
   absence_cause: AbsenceCause | null;
   description: string | null;
+}
+
+export type DayType = 'normal' | 'sunday' | 'holiday';
+
+export interface DailyAttendanceSheet {
+  day_type: DayType;
+  holiday_id: number | null;
+  holiday_name: string | null;
+  rows: DailyAttendanceRow[];
 }
 
 export type LeaveRequestStatus = 'en_attente' | 'acceptee' | 'refusee' | 'annulee';
