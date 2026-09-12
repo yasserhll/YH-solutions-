@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import type { Employee, Paginated } from '../../types';
@@ -14,6 +14,7 @@ interface EmployeeSelectProps {
 export function EmployeeSelect({ label = 'Employé', value, onChange, statusFilter = 'actif', error }: EmployeeSelectProps) {
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<Employee | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['employees', 'select', search, statusFilter],
@@ -21,11 +22,11 @@ export function EmployeeSelect({ label = 'Employé', value, onChange, statusFilt
       api.get<Paginated<Employee>>('/employees', { params: { search, status: statusFilter, per_page: 20 } }).then((r) => r.data.data),
   });
 
-  const selectedLabel = useMemo(() => {
-    if (!value || !data) return '';
-    const emp = data.find((e) => e.id === value);
-    return emp?.full_name ?? '';
-  }, [value, data]);
+  useEffect(() => {
+    if (value === null) setSelected(null);
+  }, [value]);
+
+  const selectedLabel = value && selected?.id === value ? selected.full_name : '';
 
   return (
     <div className="relative">
@@ -54,6 +55,7 @@ export function EmployeeSelect({ label = 'Employé', value, onChange, statusFilt
               type="button"
               key={emp.id}
               onMouseDown={() => {
+                setSelected(emp);
                 onChange(emp);
                 setSearch('');
                 setOpen(false);
