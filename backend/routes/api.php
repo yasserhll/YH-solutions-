@@ -33,7 +33,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/sites', [SiteController::class, 'index']);
     Route::get('/departments', [DepartmentController::class, 'index']);
     Route::get('/positions', [PositionController::class, 'index']);
+    // Declaring/removing a holiday is deliberately open to any authenticated
+    // user (not gated behind superadmin like Sites/Départements/Fonctions
+    // below) — a responsable needs to be able to flip a day's pointage
+    // default from Pointage itself, without waiting on the SuperAdmin.
     Route::get('/holidays', [HolidayController::class, 'index']);
+    Route::post('/holidays', [HolidayController::class, 'store']);
+    Route::put('/holidays/{holiday}', [HolidayController::class, 'update']);
+    Route::delete('/holidays/{holiday}', [HolidayController::class, 'destroy']);
 
     Route::apiResource('employees', EmployeeController::class);
 
@@ -84,10 +91,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/positions', [PositionController::class, 'store']);
         Route::put('/positions/{position}', [PositionController::class, 'update']);
         Route::delete('/positions/{position}', [PositionController::class, 'destroy']);
-
-        Route::post('/holidays', [HolidayController::class, 'store']);
-        Route::put('/holidays/{holiday}', [HolidayController::class, 'update']);
-        Route::delete('/holidays/{holiday}', [HolidayController::class, 'destroy']);
 
         Route::apiResource('users', UserController::class)->except(['show']);
 

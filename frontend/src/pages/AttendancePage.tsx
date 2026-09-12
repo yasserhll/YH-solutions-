@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { UserX, Pencil, Download, CalendarOff, Trash2 } from 'lucide-react';
 import { api, apiErrorMessage, downloadFile } from '../api/client';
-import { useAuth } from '../contexts/AuthContext';
 import { useSiteParams } from '../hooks/useSiteParams';
 import type { AbsenceCause, DailyAttendanceRow, DailyAttendanceSheet } from '../types';
 import { PageHeader } from '../components/ui/PageHeader';
@@ -25,8 +24,6 @@ const causeLabels: Record<AbsenceCause, string> = {
 };
 
 export default function AttendancePage() {
-  const { user } = useAuth();
-  const isSuperAdmin = user?.role === 'superadmin';
   const siteParams = useSiteParams();
   const queryClient = useQueryClient();
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -111,12 +108,12 @@ export default function AttendancePage() {
           <Button variant="secondary" onClick={() => exportMutation.mutate()} disabled={exportMutation.isPending}>
             <Download size={16} /> {exportMutation.isPending ? 'Export en cours...' : 'Export Excel'}
           </Button>
-          {isSuperAdmin && dayType !== 'holiday' && (
+          {dayType !== 'holiday' && (
             <Button variant="secondary" onClick={() => setShowHolidayForm(true)}>
               <CalendarOff size={16} /> Déclarer jour férié
             </Button>
           )}
-          {isSuperAdmin && dayType === 'holiday' && (
+          {dayType === 'holiday' && (
             <Button variant="secondary" onClick={() => setConfirmRemoveHoliday(true)}>
               <Trash2 size={16} /> Retirer le jour férié
             </Button>
