@@ -12,6 +12,8 @@ use App\Http\Controllers\Api\EmployeeController;
 use App\Http\Controllers\Api\EntryController;
 use App\Http\Controllers\Api\ExitController;
 use App\Http\Controllers\Api\HolidayController;
+use App\Http\Controllers\Api\HseReportController;
+use App\Http\Controllers\Api\HseUserController;
 use App\Http\Controllers\Api\LeaveController;
 use App\Http\Controllers\Api\LeaveRequestController;
 use App\Http\Controllers\Api\PositionController;
@@ -27,73 +29,100 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
 
-    Route::get('/dashboard', [DashboardController::class, 'index']);
+    // The HSE module: only `hse`, `responsable_hse`, and a SuperAdmin ever
+    // reach it (see EnsureHseModuleAccess) — a plain `responsable` gets a 403,
+    // exactly the mirror of `hse`/`responsable_hse` being blocked from
+    // everything below by BlockHseModuleRoles.
+    Route::middleware('hse.access')->group(function () {
+        Route::get('/hse-dashboard', [HseReportController::class, 'dashboard']);
+        Route::apiResource('hse-reports', HseReportController::class)->only(['index', 'store', 'update', 'destroy']);
+        Route::get('/hse-reports/{hseReport}/export-pdf', [HseReportController::class, 'exportPdf']);
+        Route::get('/hse-reports/{hseReport}/export-excel', [HseReportController::class, 'exportExcel']);
+        Route::apiResource('hse-users', HseUserController::class)->only(['index', 'store', 'update', 'destroy'])->parameters(['hse-users' => 'hseUser']);
+    });
 
-    Route::get('/sites', [SiteController::class, 'index']);
-    Route::get('/departments', [DepartmentController::class, 'index']);
-    Route::get('/positions', [PositionController::class, 'index']);
-    // Declaring/removing a holiday is deliberately open to any authenticated
-    // user (not gated behind superadmin like Sites/Départements/Fonctions
-    // below) — a responsable needs to be able to flip a day's pointage
-    // default from Pointage itself, without waiting on the SuperAdmin.
-    Route::get('/holidays', [HolidayController::class, 'index']);
-    Route::post('/holidays', [HolidayController::class, 'store']);
-    Route::put('/holidays/{holiday}', [HolidayController::class, 'update']);
-    Route::delete('/holidays/{holiday}', [HolidayController::class, 'destroy']);
+    // A `responsable_hse` also gets safety-oversight access to these five
+    // modules (Pointage, Congés, Sanctions, Entrées/Sorties, Affectations) —
+    // scoped to their own sites exactly like a regular responsable, via the
+    // same InteractsWithSites machinery every controller here already uses.
+    // An `hse` (animateur) account is still blocked from all of it — it
+    // stays confined to strictly the HSE module above. This is deliberately
+    // narrower than `hse.block` below, which blocks BOTH hse roles.
+    Route::middleware('hse.block-animateur')->group(function () {
+        // Reference data an `hse.access`-adjacent Congés/Sanctions/Mouvements/
+        // Affectations form needs (EmployeeSelect, dept/position dropdowns,
+        // the Pointage holiday toggle) — read-only here; writing them (or any
+        // other Employee field) stays behind `hse.block` below.
+        Route::get('/employees', [EmployeeController::class, 'index']);
+        Route::get('/departments', [DepartmentController::class, 'index']);
+        Route::get('/positions', [PositionController::class, 'index']);
+        Route::get('/holidays', [HolidayController::class, 'index']);
+        Route::post('/holidays', [HolidayController::class, 'store']);
+        Route::put('/holidays/{holiday}', [HolidayController::class, 'update']);
+        Route::delete('/holidays/{holiday}', [HolidayController::class, 'destroy']);
 
-    Route::apiResource('employees', EmployeeController::class);
+        Route::get('/attendance/daily', [AttendanceController::class, 'daily']);
+        Route::post('/attendance/bulk', [AttendanceController::class, 'bulkStore']);
+        Route::apiResource('attendance', AttendanceController::class)->except(['show']);
 
-    Route::get('/attendance/daily', [AttendanceController::class, 'daily']);
-    Route::post('/attendance/bulk', [AttendanceController::class, 'bulkStore']);
-    Route::apiResource('attendance', AttendanceController::class)->except(['show']);
+        Route::patch('/leave-requests/{leaveRequest}/status', [LeaveRequestController::class, 'updateStatus']);
+        Route::apiResource('leave-requests', LeaveRequestController::class)->except(['show']);
 
-    Route::patch('/leave-requests/{leaveRequest}/status', [LeaveRequestController::class, 'updateStatus']);
-    Route::apiResource('leave-requests', LeaveRequestController::class)->except(['show']);
+        Route::post('/leaves/{leave}/extensions', [LeaveController::class, 'extend']);
+        Route::patch('/leaves/{leave}/status', [LeaveController::class, 'updateStatus']);
+        Route::apiResource('leaves', LeaveController::class)->except(['show'])->parameters(['leaves' => 'leave']);
 
-    Route::post('/leaves/{leave}/extensions', [LeaveController::class, 'extend']);
-    Route::patch('/leaves/{leave}/status', [LeaveController::class, 'updateStatus']);
-    Route::apiResource('leaves', LeaveController::class)->except(['show'])->parameters(['leaves' => 'leave']);
+        Route::apiResource('disciplinary-warnings', DisciplinaryWarningController::class)->except(['show']);
+        Route::apiResource('suspensions', SuspensionController::class)->except(['show']);
 
-    Route::apiResource('disciplinary-warnings', DisciplinaryWarningController::class)->except(['show']);
-    Route::apiResource('suspensions', SuspensionController::class)->except(['show']);
+        Route::apiResource('assignments', AssignmentController::class)->only(['index', 'store', 'update', 'destroy']);
+        Route::apiResource('entries', EntryController::class)->only(['index', 'store', 'update', 'destroy']);
+        Route::apiResource('exits', ExitController::class)->only(['index', 'store', 'update', 'destroy']);
+    });
 
-    // A responsable can correct their own site's mistakes here too — only
-    // the caisse (below) reserves edit/delete to the SuperAdmin.
-    Route::apiResource('assignments', AssignmentController::class)->only(['index', 'store', 'update', 'destroy']);
-    Route::apiResource('entries', EntryController::class)->only(['index', 'store', 'update', 'destroy']);
-    Route::apiResource('exits', ExitController::class)->only(['index', 'store', 'update', 'destroy']);
+    // Everything below is off-limits to BOTH `hse` and `responsable_hse` —
+    // they are restricted to the HSE module plus the five modules above.
+    Route::middleware('hse.block')->group(function () {
+        Route::get('/dashboard', [DashboardController::class, 'index']);
 
-    Route::apiResource('cash-transactions', CashTransactionController::class)->only(['index', 'store']);
-    Route::get('/cash-account', [CashAccountController::class, 'show']);
+        Route::get('/sites', [SiteController::class, 'index']);
+        // Writing to an employee (or listing every field on it, via show/
+        // store/update/destroy) stays here — only the read-only index above
+        // is shared with a responsable_hse.
+        Route::apiResource('employees', EmployeeController::class)->except(['index']);
 
-    Route::get('/reports/attendance', [ReportController::class, 'attendance']);
-    Route::get('/reports/leaves', [ReportController::class, 'leaves']);
-    Route::get('/reports/sanctions', [ReportController::class, 'sanctions']);
-    Route::get('/reports/movements', [ReportController::class, 'movements']);
-    Route::get('/reports/cash', [ReportController::class, 'cash']);
+        Route::apiResource('cash-transactions', CashTransactionController::class)->only(['index', 'store']);
+        Route::get('/cash-account', [CashAccountController::class, 'show']);
 
-    Route::get('/reports/attendance/export', [ReportController::class, 'exportAttendance']);
-    Route::get('/reports/leaves/export', [ReportController::class, 'exportLeaves']);
-    Route::get('/reports/sanctions/export', [ReportController::class, 'exportSanctions']);
-    Route::get('/reports/movements/export', [ReportController::class, 'exportMovements']);
-    Route::get('/reports/cash/export', [ReportController::class, 'exportCash']);
+        Route::get('/reports/attendance', [ReportController::class, 'attendance']);
+        Route::get('/reports/leaves', [ReportController::class, 'leaves']);
+        Route::get('/reports/sanctions', [ReportController::class, 'sanctions']);
+        Route::get('/reports/movements', [ReportController::class, 'movements']);
+        Route::get('/reports/cash', [ReportController::class, 'cash']);
 
-    Route::middleware('superadmin')->group(function () {
-        Route::post('/sites', [SiteController::class, 'store']);
-        Route::put('/sites/{site}', [SiteController::class, 'update']);
-        Route::delete('/sites/{site}', [SiteController::class, 'destroy']);
+        Route::get('/reports/attendance/export', [ReportController::class, 'exportAttendance']);
+        Route::get('/reports/leaves/export', [ReportController::class, 'exportLeaves']);
+        Route::get('/reports/sanctions/export', [ReportController::class, 'exportSanctions']);
+        Route::get('/reports/movements/export', [ReportController::class, 'exportMovements']);
+        Route::get('/reports/cash/export', [ReportController::class, 'exportCash']);
 
-        Route::post('/departments', [DepartmentController::class, 'store']);
-        Route::put('/departments/{department}', [DepartmentController::class, 'update']);
-        Route::delete('/departments/{department}', [DepartmentController::class, 'destroy']);
+        Route::middleware('superadmin')->group(function () {
+            Route::post('/sites', [SiteController::class, 'store']);
+            Route::put('/sites/{site}', [SiteController::class, 'update']);
+            Route::delete('/sites/{site}', [SiteController::class, 'destroy']);
 
-        Route::post('/positions', [PositionController::class, 'store']);
-        Route::put('/positions/{position}', [PositionController::class, 'update']);
-        Route::delete('/positions/{position}', [PositionController::class, 'destroy']);
+            Route::post('/departments', [DepartmentController::class, 'store']);
+            Route::put('/departments/{department}', [DepartmentController::class, 'update']);
+            Route::delete('/departments/{department}', [DepartmentController::class, 'destroy']);
 
-        Route::apiResource('users', UserController::class)->except(['show']);
+            Route::post('/positions', [PositionController::class, 'store']);
+            Route::put('/positions/{position}', [PositionController::class, 'update']);
+            Route::delete('/positions/{position}', [PositionController::class, 'destroy']);
 
-        Route::put('/cash-account', [CashAccountController::class, 'update']);
-        Route::apiResource('cash-transactions', CashTransactionController::class)->only(['update', 'destroy']);
+            Route::apiResource('users', UserController::class)->except(['show']);
+
+            Route::put('/cash-account', [CashAccountController::class, 'update']);
+            Route::apiResource('cash-transactions', CashTransactionController::class)->only(['update', 'destroy']);
+        });
     });
 });

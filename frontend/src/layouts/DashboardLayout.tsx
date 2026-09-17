@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
+import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard,
   Clock,
@@ -12,6 +13,7 @@ import {
   UserCog,
   FileBarChart,
   Settings,
+  HardHat,
   PanelLeft,
   LogOut,
   Sun,
@@ -42,11 +44,21 @@ function dropdownOptionClass(active: boolean) {
 const SUPPORT_EMAIL = 'Hallajiyasser@gmail.com';
 const SUPPORT_MAILTO = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Support - Solution Administrative')}`;
 
+// `hse`/`responsable_hse` never see anything here except "Rapports HSE",
+// which is superadminOnly-gated below — a plain `responsable` never sees it
+// at all. Everything else is a SuperAdmin/responsable-only module, enforced
+// server-side by `hse.block` (or `hse.block-animateur` for the five modules
+// a responsable_hse also gets — see hseModuleNavItems below).
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/pointage', label: 'Pointage', icon: Clock },
   { to: '/conges', label: 'Congés', icon: CalendarDays },
   { to: '/sanctions', label: 'Sanctions', icon: ShieldAlert },
+  // Sits directly under Sanctions for a SuperAdmin, per request — points
+  // straight at the reports list, not the HSE mini-dashboard (that's a
+  // simplified view for hse/responsable_hse, not needed by a SuperAdmin who
+  // already has the full Dashboard).
+  { to: '/hse/rapports', label: 'Rapports HSE', icon: HardHat, superadminOnly: true },
   { to: '/mouvements', label: 'Entrées / Sorties', icon: ArrowLeftRight },
   { to: '/affectations', label: 'Affectations', icon: Briefcase },
   { to: '/caisse', label: 'Caisse', icon: Wallet },
@@ -55,6 +67,48 @@ const navItems = [
   { to: '/rapports', label: 'Rapports', icon: FileBarChart },
   { to: '/parametres', label: 'Paramètres', icon: Settings, superadminOnly: true },
 ];
+
+/**
+ * `hse` sees only its own dashboard + report entry — strictly the HSE
+ * module. `responsable_hse` additionally gets Pointage/Congés/Sanctions/
+ * Entrées-Sorties/Affectations (safety oversight across their sites, backed
+ * server-side by `hse.block-animateur` — an `hse` account 403s on all five)
+ * and "Comptes animateurs" (an `hse` account files reports, it doesn't
+ * manage other accounts). "Rapports HSE" sits right after Sanctions here
+ * too, mirroring the SuperAdmin's sidebar placement above.
+ */
+type NavItem = { to: string; label: string; icon: LucideIcon; end?: boolean; superadminOnly?: boolean };
+
+function hseModuleNavItems(isResponsableHse: boolean): NavItem[] {
+  const items: NavItem[] = [{ to: '/hse', label: 'Tableau de bord HSE', icon: LayoutDashboard, end: true }];
+
+  if (isResponsableHse) {
+    items.push(
+      { to: '/pointage', label: 'Pointage', icon: Clock },
+      { to: '/conges', label: 'Congés', icon: CalendarDays },
+      { to: '/sanctions', label: 'Sanctions', icon: ShieldAlert },
+    );
+  }
+
+  items.push({ to: '/hse/rapports', label: 'Rapports HSE', icon: HardHat });
+
+  if (isResponsableHse) {
+    items.push(
+      { to: '/mouvements', label: 'Entrées / Sorties', icon: ArrowLeftRight },
+      { to: '/affectations', label: 'Affectations', icon: Briefcase },
+      { to: '/hse/utilisateurs', label: 'Comptes animateurs', icon: UserCog },
+    );
+  }
+
+  return items;
+}
+
+const roleLabels: Record<string, string> = {
+  superadmin: 'SuperAdmin',
+  responsable: 'Responsable de site',
+  hse: 'Animateur HSE',
+  responsable_hse: 'Responsable HSE',
+};
 
 export function DashboardLayout() {
   const { user, logout } = useAuth();
@@ -67,6 +121,8 @@ export function DashboardLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [desktopOpen, setDesktopOpen] = useState(true);
   const isSuperAdmin = user?.role === 'superadmin';
+  const isResponsableHse = user?.role === 'responsable_hse';
+  const isHseOnly = user?.role === 'hse' || isResponsableHse;
 
   const { data: allSites } = useQuery({
     queryKey: ['sites'],
@@ -110,8 +166,8 @@ export function DashboardLayout() {
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto p-3">
-          {navItems
-            .filter((item) => !item.superadminOnly || isSuperAdmin)
+          {(isHseOnly ? hseModuleNavItems(isResponsableHse) : navItems)
+            .filter((item) => !('superadminOnly' in item && item.superadminOnly) || isSuperAdmin)
             .map((item) => (
               <NavLink
                 key={item.to}
@@ -138,7 +194,7 @@ export function DashboardLayout() {
         <div className="shrink-0 border-t border-slate-200 dark:border-slate-800 p-3 ">
           <div className="mb-2 rounded-lg bg-slate-50 dark:bg-slate-800 px-3 py-2 dark:bg-slate-800/60">
             <div className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{user?.name}</div>
-            <div className="text-xs text-slate-400 dark:text-slate-500">{isSuperAdmin ? 'SuperAdmin' : 'Responsable de site'}</div>
+            <div className="text-xs text-slate-400 dark:text-slate-500">{roleLabels[user?.role ?? ''] ?? 'Responsable de site'}</div>
           </div>
           <a
             href={SUPPORT_MAILTO}

@@ -3,38 +3,38 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { api, apiErrorMessage } from '../api/client';
-import { useSites } from '../hooks/useReferenceData';
-import type { Role, User } from '../types';
-
-const roleLabels: Record<Role, string> = {
-  superadmin: 'SuperAdmin',
-  responsable: 'Responsable de site',
-  hse: 'Animateur HSE',
-  responsable_hse: 'Responsable HSE',
-};
+import { useAuth } from '../contexts/AuthContext';
+import type { User } from '../types';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Button';
 import { DataTable, type Column } from '../components/ui/DataTable';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { Modal } from '../components/ui/Modal';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
-import { SelectField, TextField } from '../components/ui/Field';
+import { TextField } from '../components/ui/Field';
 
-export default function UsersPage() {
+/**
+ * A responsable_hse's own scoped user management — only ever touches `hse`
+ * accounts on their own assigned sites (enforced server-side in
+ * HseUserController), unlike the full /utilisateurs page which stays
+ * SuperAdmin-only and can manage any role on any site.
+ */
+export default function HseUsersPage() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<User | null | undefined>(undefined);
   const [deleting, setDeleting] = useState<User | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => api.get<User[]>('/users').then((r) => r.data),
+    queryKey: ['hse-users'],
+    queryFn: () => api.get<User[]>('/hse-users').then((r) => r.data),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => api.delete(`/users/${id}`),
+    mutationFn: (id: number) => api.delete(`/hse-users/${id}`),
     onSuccess: () => {
-      toast.success('Utilisateur supprimé.');
-      queryClient.invalidateQueries({ queryKey: ['users'] });
+      toast.success('Compte supprimé.');
+      queryClient.invalidateQueries({ queryKey: ['hse-users'] });
       setDeleting(null);
     },
     onError: (err) => toast.error(apiErrorMessage(err)),
@@ -43,14 +43,9 @@ export default function UsersPage() {
   const columns: Column<User>[] = [
     { header: 'Nom', accessor: (u) => u.name },
     { header: 'Email', accessor: (u) => u.email },
-    { header: 'Rôle', accessor: (u) => roleLabels[u.role] },
     {
       header: 'Site(s)',
-      accessor: (u) => {
-        if (u.sites.length === 0) return '—';
-        if (u.sites.length === 1) return u.sites[0].name;
-        return u.sites.map((s) => s.name).join(', ');
-      },
+      accessor: (u) => (u.sites.length ? u.sites.map((s) => s.name).join(', ') : '—'),
     },
     { header: 'Statut', accessor: (u) => <StatusBadge status={u.is_active ? 'actif' : 'sorti'} /> },
     {
@@ -74,11 +69,11 @@ export default function UsersPage() {
   return (
     <div>
       <PageHeader
-        title="Utilisateurs"
-        description="Gestion des comptes SuperAdmin et responsables de site"
+        title="Comptes animateurs HSE"
+        description="Créez et gérez les comptes des animateurs HSE de vos sites"
         actions={
           <Button onClick={() => setEditing(null)}>
-            <Plus size={16} /> Ajouter un utilisateur
+            <Plus size={16} /> Ajouter un animateur
           </Button>
         }
       />
@@ -87,12 +82,14 @@ export default function UsersPage() {
         <DataTable columns={columns} rows={data ?? []} isLoading={isLoading} keyFn={(u) => u.id} />
       </div>
 
-      {editing !== undefined && <UserFormModal user={editing} onClose={() => setEditing(undefined)} />}
+      {editing !== undefined && (
+        <HseUserFormModal hseUser={editing} mySites={user?.sites ?? []} onClose={() => setEditing(undefined)} />
+      )}
 
       <ConfirmDialog
         open={!!deleting}
-        title="Supprimer l'utilisateur"
-        message={`Voulez-vous vraiment supprimer ${deleting?.name} ?`}
+        title="Supprimer le compte"
+        message={`Voulez-vous vraiment supprimer le compte de ${deleting?.name} ?`}
         onCancel={() => setDeleting(null)}
         onConfirm={() => deleting && deleteMutation.mutate(deleting.id)}
         isLoading={deleteMutation.isPending}
@@ -101,16 +98,22 @@ export default function UsersPage() {
   );
 }
 
-function UserFormModal({ user, onClose }: { user: User | null; onClose: () => void }) {
+function HseUserFormModal({
+  hseUser,
+  mySites,
+  onClose,
+}: {
+  hseUser: User | null;
+  mySites: User['sites'];
+  onClose: () => void;
+}) {
   const queryClient = useQueryClient();
-  const { data: sites } = useSites();
   const [form, setForm] = useState({
-    name: user?.name ?? '',
-    email: user?.email ?? '',
+    name: hseUser?.name ?? '',
+    email: hseUser?.email ?? '',
     password: '',
-    role: (user?.role ?? 'responsable') as Role,
-    site_ids: user?.sites.map((s) => s.id) ?? ([] as number[]),
-    is_active: user?.is_active ?? true,
+    site_ids: hseUser?.sites.map((s) => s.id) ?? ([] as number[]),
+    is_active: hseUser?.is_active ?? true,
   });
 
   function toggleSite(id: number) {
@@ -121,17 +124,17 @@ function UserFormModal({ user, onClose }: { user: User | null; onClose: () => vo
   }
 
   const mutation = useMutation({
-    mutationFn: () => (user ? api.put(`/users/${user.id}`, form) : api.post('/users', form)),
+    mutationFn: () => (hseUser ? api.put(`/hse-users/${hseUser.id}`, form) : api.post('/hse-users', form)),
     onSuccess: () => {
-      toast.success(user ? 'Utilisateur mis à jour.' : 'Utilisateur créé.');
-      queryClient.invalidateQueries({ queryKey: ['users'] });
+      toast.success(hseUser ? 'Compte mis à jour.' : 'Compte créé.');
+      queryClient.invalidateQueries({ queryKey: ['hse-users'] });
       onClose();
     },
     onError: (err) => toast.error(apiErrorMessage(err)),
   });
 
   return (
-    <Modal open onClose={onClose} title={user ? "Modifier l'utilisateur" : 'Ajouter un utilisateur'}>
+    <Modal open onClose={onClose} title={hseUser ? "Modifier l'animateur" : 'Ajouter un animateur HSE'}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -142,38 +145,25 @@ function UserFormModal({ user, onClose }: { user: User | null; onClose: () => vo
         <TextField label="Nom" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         <TextField label="Email" type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
         <TextField
-          label={user ? 'Nouveau mot de passe (laisser vide pour ne pas changer)' : 'Mot de passe'}
+          label={hseUser ? 'Nouveau mot de passe (laisser vide pour ne pas changer)' : 'Mot de passe'}
           type="password"
-          required={!user}
+          required={!hseUser}
           value={form.password}
           onChange={(e) => setForm({ ...form, password: e.target.value })}
         />
-        <SelectField label="Rôle" required value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })}>
-          <option value="responsable">Responsable de site</option>
-          <option value="hse">Animateur HSE</option>
-          <option value="responsable_hse">Responsable HSE</option>
-          <option value="superadmin">SuperAdmin</option>
-        </SelectField>
-        {form.role !== 'superadmin' && (
-          <div>
-            <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
-              Sites assignés {form.site_ids.length === 0 && <span className="text-red-500">(au moins un requis)</span>}
-            </span>
-            <div className="space-y-1.5 rounded-lg border border-slate-300 p-2.5 dark:border-slate-600">
-              {sites?.map((s) => (
-                <label key={s.id} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-                  <input type="checkbox" checked={form.site_ids.includes(s.id)} onChange={() => toggleSite(s.id)} />
-                  {s.name}
-                </label>
-              ))}
-            </div>
-            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-              {form.role === 'hse' || form.role === 'responsable_hse'
-                ? "Ce compte n'a accès qu'au module Rapports HSE, restreint aux sites assignés ci-dessus — rien d'autre dans l'application."
-                : 'Un responsable avec plusieurs sites travaille sur tous ces sites à la fois (dépenses, tableaux de bord, rapports...) et choisit le site concerné à chaque enregistrement.'}
-            </p>
+        <div>
+          <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+            Site(s) assigné(s) {form.site_ids.length === 0 && <span className="text-red-500">(au moins un requis)</span>}
+          </span>
+          <div className="space-y-1.5 rounded-lg border border-slate-300 p-2.5 dark:border-slate-600">
+            {mySites.map((s) => (
+              <label key={s.id} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                <input type="checkbox" checked={form.site_ids.includes(s.id)} onChange={() => toggleSite(s.id)} />
+                {s.name}
+              </label>
+            ))}
           </div>
-        )}
+        </div>
         <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
           <input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} />
           Compte actif

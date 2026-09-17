@@ -19,6 +19,9 @@ import CashPage from './pages/CashPage';
 import UsersPage from './pages/UsersPage';
 import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
+import HseReportsPage from './pages/HseReportsPage';
+import HseDashboardPage from './pages/HseDashboardPage';
+import HseUsersPage from './pages/HseUsersPage';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 10_000 } },
@@ -42,6 +45,45 @@ function RequireSuperAdmin({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * `hse` and `responsable_hse` are restricted to ONLY the HSE module — every
+ * other route redirects them straight to /hse (the backend enforces this the
+ * same way via BlockHseModuleRoles, this is just so the UI never shows a
+ * blank/403'd page for a route they can't use).
+ */
+function RequireFullAccess({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (user && (user.role === 'hse' || user.role === 'responsable_hse')) return <Navigate to="/hse" replace />;
+  return <>{children}</>;
+}
+
+/**
+ * Narrower than RequireFullAccess: blocks only `hse` (animateur), not
+ * `responsable_hse` — used on Pointage/Congés/Sanctions/Entrées-Sorties/
+ * Affectations, which a responsable_hse also gets for safety oversight
+ * (backed server-side by the `hse.block-animateur` middleware). An `hse`
+ * account stays confined to strictly the HSE module.
+ */
+function RequireNotHseAnimateur({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (user?.role === 'hse') return <Navigate to="/hse" replace />;
+  return <>{children}</>;
+}
+
+/** Mirror of RequireFullAccess: /hse itself is off-limits to a plain responsable. */
+function RequireHseAccess({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (user && user.role === 'responsable') return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
+/** Managing animateur accounts is a responsable_hse (and SuperAdmin) privilege — an `hse` account never sees it. */
+function RequireResponsableHse({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (user && user.role !== 'responsable_hse' && user.role !== 'superadmin') return <Navigate to="/hse" replace />;
+  return <>{children}</>;
+}
+
 export default function App() {
   return (
     <ThemeProvider>
@@ -60,16 +102,112 @@ export default function App() {
                     </RequireAuth>
                   }
                 >
-                  <Route path="/" element={<DashboardPage />} />
-                  <Route path="/pointage" element={<AttendancePage />} />
-                  <Route path="/conges" element={<LeavesPage />} />
-                  <Route path="/sanctions" element={<SanctionsPage />} />
-                  <Route path="/mouvements" element={<MovementsPage />} />
-                  <Route path="/affectations" element={<AssignmentsPage />} />
-                  <Route path="/caisse" element={<CashPage />} />
-                  <Route path="/personnel" element={<PersonnelPage />} />
-                  <Route path="/personnel/:id" element={<EmployeeDetailPage />} />
-                  <Route path="/rapports" element={<ReportsPage />} />
+                  <Route
+                    path="/"
+                    element={
+                      <RequireFullAccess>
+                        <DashboardPage />
+                      </RequireFullAccess>
+                    }
+                  />
+                  <Route
+                    path="/pointage"
+                    element={
+                      <RequireNotHseAnimateur>
+                        <AttendancePage />
+                      </RequireNotHseAnimateur>
+                    }
+                  />
+                  <Route
+                    path="/conges"
+                    element={
+                      <RequireNotHseAnimateur>
+                        <LeavesPage />
+                      </RequireNotHseAnimateur>
+                    }
+                  />
+                  <Route
+                    path="/sanctions"
+                    element={
+                      <RequireNotHseAnimateur>
+                        <SanctionsPage />
+                      </RequireNotHseAnimateur>
+                    }
+                  />
+                  <Route
+                    path="/mouvements"
+                    element={
+                      <RequireNotHseAnimateur>
+                        <MovementsPage />
+                      </RequireNotHseAnimateur>
+                    }
+                  />
+                  <Route
+                    path="/affectations"
+                    element={
+                      <RequireNotHseAnimateur>
+                        <AssignmentsPage />
+                      </RequireNotHseAnimateur>
+                    }
+                  />
+                  <Route
+                    path="/caisse"
+                    element={
+                      <RequireFullAccess>
+                        <CashPage />
+                      </RequireFullAccess>
+                    }
+                  />
+                  <Route
+                    path="/personnel"
+                    element={
+                      <RequireFullAccess>
+                        <PersonnelPage />
+                      </RequireFullAccess>
+                    }
+                  />
+                  <Route
+                    path="/personnel/:id"
+                    element={
+                      <RequireFullAccess>
+                        <EmployeeDetailPage />
+                      </RequireFullAccess>
+                    }
+                  />
+                  <Route
+                    path="/rapports"
+                    element={
+                      <RequireFullAccess>
+                        <ReportsPage />
+                      </RequireFullAccess>
+                    }
+                  />
+                  <Route
+                    path="/hse"
+                    element={
+                      <RequireHseAccess>
+                        <HseDashboardPage />
+                      </RequireHseAccess>
+                    }
+                  />
+                  <Route
+                    path="/hse/rapports"
+                    element={
+                      <RequireHseAccess>
+                        <HseReportsPage />
+                      </RequireHseAccess>
+                    }
+                  />
+                  <Route
+                    path="/hse/utilisateurs"
+                    element={
+                      <RequireHseAccess>
+                        <RequireResponsableHse>
+                          <HseUsersPage />
+                        </RequireResponsableHse>
+                      </RequireHseAccess>
+                    }
+                  />
                   <Route
                     path="/utilisateurs"
                     element={

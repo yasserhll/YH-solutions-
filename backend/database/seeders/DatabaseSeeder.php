@@ -11,6 +11,7 @@ use App\Models\DisciplinaryWarning;
 use App\Models\Employee;
 use App\Models\Entry;
 use App\Models\EmployeeExit;
+use App\Models\HseReport;
 use App\Models\Leave;
 use App\Models\LeaveRequest;
 use App\Models\Position;
@@ -341,5 +342,62 @@ class DatabaseSeeder extends Seeder
         // UserController, see recalculateCashPools() there) rather than only
         // becoming right after the next cash transaction happens to run.
         $ledger->recalculate($cashAccount);
+
+        // HSE module demo accounts — both restricted to ONLY the HSE module
+        // (see EnsureHseModuleAccess/BlockHseModuleRoles), never Dashboard/
+        // Personnel/Pointage/etc. `hse` files the daily report for their
+        // site; `responsable_hse` reviews every site's reports (assigned to
+        // all 4 here, to demo the same multi-site aggregation used
+        // elsewhere in the app).
+        $hseAgent = User::create([
+            'name' => 'Bouskour Abderrahmane',
+            'email' => 'hse.louta@transwin-mining.com',
+            'password' => Hash::make('password'),
+            'role' => 'hse',
+        ]);
+        $hseAgent->sites()->attach($sites['Louta']->id);
+
+        $hseResponsable = User::create([
+            'name' => 'Responsable HSE',
+            'email' => 'responsable.hse@transwin-mining.com',
+            'password' => Hash::make('password'),
+            'role' => 'responsable_hse',
+        ]);
+        $hseResponsable->sites()->attach($sites->pluck('id')->all());
+
+        // One real report, transcribed from the reference document
+        // ("Rapport Journalier HSE 10-09-2026.docx", réf. RJ-HSE-TRP-02) so
+        // the demo data matches the paper form field for field.
+        HseReport::create([
+            'site_id' => $sites['Louta']->id,
+            'report_date' => '2026-09-10',
+            'activities' => 'Chargement et déchargement de phosphate et stérile par des camions',
+            'spa_count' => 3,
+            'topics_covered' => "- L'interdiction de conduire des engins sans autorisation et sans formation.\n"
+                ."- L'obligation de porter la ceinture de sécurité.\n"
+                ."- L'interdiction de circuler en sens interdit.",
+            'participants_count' => 38,
+            'sanctions_count' => 0,
+            'dangerous_situations_count' => 2,
+            'equipment_inspected' => "- L'état des pneus\n- Les ceintures de sécurité\n- Les extincteurs\n- Système d'éclairage",
+            'general_state' => 'non_conforme',
+            'sor_notes' => null,
+            'corrective_actions' => null,
+            'incidents_count' => 0,
+            'incidents_comment' => 'RAS',
+            'accidents_count' => 0,
+            'accidents_comment' => 'RAS',
+            'environmental_impact_count' => 0,
+            'environmental_impact_comment' => 'RAS',
+            'shift_headcount' => null,
+            'hours_worked' => null,
+            'sensitization_participation_rate' => 60,
+            'corrective_actions_closure_rate' => 75,
+            'non_conformities_count' => 5,
+            'inductions_count' => 1,
+            'audits_count' => 1,
+            'evacuation_drills_count' => 0,
+            'created_by' => $hseAgent->id,
+        ]);
     }
 }

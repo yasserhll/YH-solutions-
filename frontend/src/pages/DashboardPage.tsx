@@ -52,6 +52,95 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8">
       <section>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+          Vue graphique
+        </h2>
+        <div className="grid gap-6 lg:grid-cols-2">
+          <DonutStat
+            title="Pointage du jour"
+            segments={[
+              { name: 'Présents', value: data.attendance.present, color: '#22c55e', to: '/pointage' },
+              { name: 'Absents', value: totalAbsentToday, color: '#ef4444', to: '/pointage' },
+              { name: 'Non pointés', value: nonPointes, color: '#94a3b8', to: '/pointage' },
+            ]}
+          />
+
+          <SegmentedBar
+            title="Congés"
+            subtitle={`${data.leaves.pending + data.leaves.accepted + data.leaves.in_progress + data.leaves.completed} dossiers suivis`}
+            segments={[
+              { name: 'En attente', value: data.leaves.pending, color: '#f59e0b', to: '/conges?tab=demandes' },
+              { name: 'Acceptés', value: data.leaves.accepted, color: '#22c55e', to: '/conges?tab=demandes' },
+              { name: 'En cours', value: data.leaves.in_progress, color: '#3b82f6', to: '/conges?tab=conges-en-cours' },
+              { name: 'Terminés', value: data.leaves.completed, color: '#94a3b8', to: '/conges?tab=conges-en-cours' },
+            ]}
+          />
+
+          <DonutStat
+            title="Sanctions"
+            segments={[
+              { name: 'Avertissements', value: data.sanctions.warnings, color: '#f59e0b', to: '/sanctions?tab=avertissements' },
+              { name: 'Mises à pied', value: data.sanctions.suspensions, color: '#ef4444', to: '/sanctions?tab=mises-a-pied' },
+            ]}
+          />
+
+          <SegmentedBar
+            title="Mouvements de personnel"
+            subtitle={`${totalMovements30d} mouvements sur les 30 derniers jours`}
+            segments={[
+              { name: 'Nouveaux employés', value: data.personnel.new_employees_30d, color: '#3b82f6', to: '/personnel' },
+              { name: 'Sorties', value: data.personnel.recent_exits_30d, color: '#f59e0b', to: '/mouvements?tab=sorties' },
+            ]}
+          />
+        </div>
+      </section>
+
+      <section>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+            Dernières opérations de caisse
+          </h2>
+          <Link to="/caisse" className="text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
+            Voir tout →
+          </Link>
+        </div>
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                <th className="px-4 py-3 font-medium">Date</th>
+                <th className="px-4 py-3 font-medium">Bénéficiaire</th>
+                <th className="px-4 py-3 font-medium">Site</th>
+                <th className="px-4 py-3 font-medium">Description</th>
+                <th className="px-4 py-3 font-medium">Type</th>
+                <th className="px-4 py-3 text-right font-medium">Montant</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {data.cash.recent_operations.map((op) => (
+                <tr
+                  key={op.id}
+                  className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                  onClick={() => navigate('/caisse')}
+                >
+                  <td className="px-4 py-2.5">{new Date(op.date).toLocaleDateString('fr-FR')}</td>
+                  <td className="px-4 py-2.5">{op.beneficiary ?? '—'}</td>
+                  <td className="px-4 py-2.5">{op.site?.name}</td>
+                  <td className="px-4 py-2.5">{op.description}</td>
+                  <td className="px-4 py-2.5">
+                    <StatusBadge status={op.type} />
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-medium">{money(Number(op.amount))}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          </div>
+        </div>
+      </section>
+
+      <section>
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Personnel</h2>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
           <KpiCard label="Total employés" value={data.personnel.total} icon={Users} to="/personnel" />
@@ -157,95 +246,6 @@ export default function DashboardPage() {
           </div>
         </section>
       </div>
-
-      <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-          Vue graphique
-        </h2>
-        <div className="grid gap-6 lg:grid-cols-2">
-          <DonutStat
-            title="Pointage du jour"
-            segments={[
-              { name: 'Présents', value: data.attendance.present, color: '#22c55e' },
-              { name: 'Absents', value: totalAbsentToday, color: '#ef4444' },
-              { name: 'Non pointés', value: nonPointes, color: '#94a3b8' },
-            ]}
-          />
-
-          <SegmentedBar
-            title="Congés"
-            subtitle={`${data.leaves.pending + data.leaves.accepted + data.leaves.in_progress + data.leaves.completed} dossiers suivis`}
-            segments={[
-              { name: 'En attente', value: data.leaves.pending, color: '#f59e0b' },
-              { name: 'Acceptés', value: data.leaves.accepted, color: '#22c55e' },
-              { name: 'En cours', value: data.leaves.in_progress, color: '#3b82f6' },
-              { name: 'Terminés', value: data.leaves.completed, color: '#94a3b8' },
-            ]}
-          />
-
-          <DonutStat
-            title="Sanctions"
-            segments={[
-              { name: 'Avertissements', value: data.sanctions.warnings, color: '#f59e0b' },
-              { name: 'Mises à pied', value: data.sanctions.suspensions, color: '#ef4444' },
-            ]}
-          />
-
-          <SegmentedBar
-            title="Mouvements de personnel"
-            subtitle={`${totalMovements30d} mouvements sur les 30 derniers jours`}
-            segments={[
-              { name: 'Nouveaux employés', value: data.personnel.new_employees_30d, color: '#3b82f6' },
-              { name: 'Sorties', value: data.personnel.recent_exits_30d, color: '#f59e0b' },
-            ]}
-          />
-        </div>
-      </section>
-
-      <section>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-            Dernières opérations de caisse
-          </h2>
-          <Link to="/caisse" className="text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
-            Voir tout →
-          </Link>
-        </div>
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] text-left text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="px-4 py-3 font-medium">Date</th>
-                <th className="px-4 py-3 font-medium">Bénéficiaire</th>
-                <th className="px-4 py-3 font-medium">Site</th>
-                <th className="px-4 py-3 font-medium">Description</th>
-                <th className="px-4 py-3 font-medium">Type</th>
-                <th className="px-4 py-3 text-right font-medium">Montant</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {data.cash.recent_operations.map((op) => (
-                <tr
-                  key={op.id}
-                  className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/60"
-                  onClick={() => navigate('/caisse')}
-                >
-                  <td className="px-4 py-2.5">{new Date(op.date).toLocaleDateString('fr-FR')}</td>
-                  <td className="px-4 py-2.5">{op.beneficiary ?? '—'}</td>
-                  <td className="px-4 py-2.5">{op.site?.name}</td>
-                  <td className="px-4 py-2.5">{op.description}</td>
-                  <td className="px-4 py-2.5">
-                    <StatusBadge status={op.type} />
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-medium">{money(Number(op.amount))}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
-        </div>
-      </section>
     </div>
   );
 }

@@ -1,9 +1,12 @@
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
+import { useNavigate } from 'react-router-dom';
 
 export interface ChartSegment {
   name: string;
   value: number;
   color: string;
+  /** Clicking this segment (slice or legend row) navigates here, if given. */
+  to?: string;
 }
 
 interface DonutStatProps {
@@ -12,6 +15,7 @@ interface DonutStatProps {
 }
 
 export function DonutStat({ title, segments }: DonutStatProps) {
+  const navigate = useNavigate();
   const data = segments.filter((s) => s.value > 0);
   const total = data.reduce((sum, s) => sum + s.value, 0);
   const lead = data.slice().sort((a, b) => b.value - a.value)[0];
@@ -29,7 +33,12 @@ export function DonutStat({ title, segments }: DonutStatProps) {
               <PieChart>
                 <Pie data={data} dataKey="value" nameKey="name" innerRadius="72%" outerRadius="100%" paddingAngle={2} stroke="none">
                   {data.map((s) => (
-                    <Cell key={s.name} fill={s.color} />
+                    <Cell
+                      key={s.name}
+                      fill={s.color}
+                      cursor={s.to ? 'pointer' : undefined}
+                      onClick={() => s.to && navigate(s.to)}
+                    />
                   ))}
                 </Pie>
               </PieChart>
@@ -43,10 +52,17 @@ export function DonutStat({ title, segments }: DonutStatProps) {
           </div>
           <ul className="w-full min-w-0 flex-1 space-y-2.5">
             {data.map((s) => (
-              <li key={s.name} className="flex items-center gap-2 text-sm">
-                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: s.color }} />
-                <span className="flex-1 truncate text-slate-600 dark:text-slate-300">{s.name}</span>
-                <span className="font-semibold text-slate-900 dark:text-slate-100">{s.value}</span>
+              <li key={s.name}>
+                <button
+                  type="button"
+                  disabled={!s.to}
+                  onClick={() => s.to && navigate(s.to)}
+                  className="flex w-full items-center gap-2 rounded-md text-left text-sm disabled:cursor-default enabled:cursor-pointer enabled:hover:text-slate-900 dark:enabled:hover:text-white"
+                >
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: s.color }} />
+                  <span className="flex-1 truncate text-slate-600 dark:text-slate-300">{s.name}</span>
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">{s.value}</span>
+                </button>
               </li>
             ))}
           </ul>

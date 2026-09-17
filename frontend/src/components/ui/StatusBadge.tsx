@@ -31,6 +31,8 @@ const map: Record<string, { label: string; color: keyof typeof palettes }> = {
   expense: { label: 'Dépense', color: 'red' },
   entry: { label: 'Entrée', color: 'green' },
   transfer: { label: 'Transfert', color: 'blue' },
+  conforme: { label: 'Conforme', color: 'green' },
+  non_conforme: { label: 'Non conforme', color: 'red' },
 };
 
 export function StatusBadge({ status }: { status: string }) {

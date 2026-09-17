@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import type { ChartSegment } from './DonutStat';
 
 interface SegmentedBarProps {
@@ -7,6 +8,7 @@ interface SegmentedBarProps {
 }
 
 export function SegmentedBar({ title, subtitle, segments }: SegmentedBarProps) {
+  const navigate = useNavigate();
   const data = segments.filter((s) => s.value > 0);
   const total = data.reduce((sum, s) => sum + s.value, 0);
 
@@ -20,15 +22,28 @@ export function SegmentedBar({ title, subtitle, segments }: SegmentedBarProps) {
         <>
           <div className="mb-4 flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
             {data.map((s) => (
-              <div key={s.name} className="h-full" style={{ width: `${(s.value / total) * 100}%`, backgroundColor: s.color }} />
+              <div
+                key={s.name}
+                role={s.to ? 'button' : undefined}
+                onClick={() => s.to && navigate(s.to)}
+                className={s.to ? 'h-full cursor-pointer' : 'h-full'}
+                style={{ width: `${(s.value / total) * 100}%`, backgroundColor: s.color }}
+              />
             ))}
           </div>
           <ul className="space-y-2">
             {data.map((s) => (
-              <li key={s.name} className="flex items-center gap-2 text-sm">
-                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: s.color }} />
-                <span className="flex-1 text-slate-600 dark:text-slate-300">{s.name}</span>
-                <span className="font-semibold text-slate-900 dark:text-slate-100">{s.value}</span>
+              <li key={s.name}>
+                <button
+                  type="button"
+                  disabled={!s.to}
+                  onClick={() => s.to && navigate(s.to)}
+                  className="flex w-full items-center gap-2 rounded-md text-left text-sm disabled:cursor-default enabled:cursor-pointer enabled:hover:text-slate-900 dark:enabled:hover:text-white"
+                >
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: s.color }} />
+                  <span className="flex-1 text-slate-600 dark:text-slate-300">{s.name}</span>
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">{s.value}</span>
+                </button>
               </li>
             ))}
           </ul>

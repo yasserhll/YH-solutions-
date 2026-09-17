@@ -18,8 +18,8 @@ class StoreUserRequest extends FormRequest
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
-            'role' => ['required', Rule::in(['superadmin', 'responsable'])],
-            'site_ids' => ['required_if:role,responsable', 'array', 'min:1'],
+            'role' => ['required', Rule::in(['superadmin', 'responsable', 'hse', 'responsable_hse'])],
+            'site_ids' => ['required_unless:role,superadmin', 'array', 'min:1'],
             'site_ids.*' => ['integer', 'exists:sites,id'],
             'is_active' => ['sometimes', 'boolean'],
         ];

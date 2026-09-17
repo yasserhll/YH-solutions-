@@ -1,4 +1,11 @@
-export type Role = 'superadmin' | 'responsable';
+/**
+ * `hse` and `responsable_hse` are restricted to ONLY the HSE module (see
+ * backend EnsureHseModuleAccess/BlockHseModuleRoles) — everything else in
+ * the app is off-limits to them, and conversely a plain `responsable` never
+ * sees the HSE module. `hse` files the daily report; `responsable_hse`
+ * reviews/controls every report on their assigned site(s).
+ */
+export type Role = 'superadmin' | 'responsable' | 'hse' | 'responsable_hse';
 
 export interface Site {
   id: number;
@@ -27,9 +34,9 @@ export interface AuthUser {
   name: string;
   email: string;
   role: Role;
-  /** The site this user is currently working in (their "active site"). */
+  /** Only set when this user has exactly one assigned site — null otherwise (multi-site or superadmin). */
   site: Site | null;
-  /** Every site this responsable is assigned to — a superadmin gets []. */
+  /** Every site assigned to this user, usable simultaneously — a superadmin gets []. */
   sites: Site[];
 }
 
@@ -161,6 +168,85 @@ export interface Suspension {
   end_date: string;
   employee?: Employee;
   site?: Site;
+}
+
+export type HseGeneralState = 'conforme' | 'non_conforme';
+
+/** Mirrors the paper "RAPPORT JOURNALIER HSE" form (réf. RJ-HSE-TRP-02) field for field. */
+export interface HseReport {
+  id: number;
+  site_id: number;
+  report_date: string;
+  activities: string;
+  spa_count: number;
+  topics_covered: string | null;
+  participants_count: number;
+  sanctions_count: number;
+  dangerous_situations_count: number;
+  equipment_inspected: string | null;
+  general_state: HseGeneralState;
+  sor_notes: string | null;
+  corrective_actions: string | null;
+  incidents_count: number;
+  incidents_comment: string | null;
+  accidents_count: number;
+  accidents_comment: string | null;
+  environmental_impact_count: number;
+  environmental_impact_comment: string | null;
+  shift_headcount: number | null;
+  hours_worked: string | null;
+  sensitization_participation_rate: string | null;
+  corrective_actions_closure_rate: string | null;
+  non_conformities_count: number;
+  inductions_count: number;
+  audits_count: number;
+  evacuation_drills_count: number;
+  created_by: number | null;
+  site?: Site;
+  creator?: { id: number; name: string } | null;
+}
+
+export interface HseDashboardTotals {
+  reports_count: number;
+  incidents_count: number;
+  accidents_count: number;
+  environmental_impact_count: number;
+  sanctions_count: number;
+  dangerous_situations_count: number;
+  non_conformities_count: number;
+  inductions_count: number;
+  audits_count: number;
+  evacuation_drills_count: number;
+  avg_sensitization_participation_rate: number | null;
+  avg_corrective_actions_closure_rate: number | null;
+}
+
+export interface HseDashboardTrendPoint {
+  date: string;
+  reports_count: number;
+  incidents_count: number;
+  accidents_count: number;
+  dangerous_situations_count: number;
+}
+
+export interface HseDashboardSiteComparison {
+  site_id: number;
+  site_name: string | null;
+  reports_count: number;
+  incidents_count: number;
+  accidents_count: number;
+  dangerous_situations_count: number;
+  non_conformities_count: number;
+}
+
+export interface HseDashboardData {
+  date_from: string;
+  date_to: string;
+  totals: HseDashboardTotals;
+  general_state_breakdown: { conforme: number; non_conforme: number };
+  trend: HseDashboardTrendPoint[];
+  by_site: HseDashboardSiteComparison[];
+  recent_reports: HseReport[];
 }
 
 export interface Assignment {

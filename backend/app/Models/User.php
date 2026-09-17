@@ -66,6 +66,28 @@ class User extends Authenticatable
         return $this->role === 'superadmin';
     }
 
+    public function isHse(): bool
+    {
+        return $this->role === 'hse';
+    }
+
+    public function isResponsableHse(): bool
+    {
+        return $this->role === 'responsable_hse';
+    }
+
+    /**
+     * `hse` and `responsable_hse` are restricted to ONLY the HSE module (see
+     * EnsureHseModuleAccess/BlockHseModuleRoles) — everything else in the
+     * app (Dashboard, Personnel, Pointage, Congés, Caisse...) is off-limits
+     * to them, the mirror image of a SuperAdmin/responsable never seeing the
+     * HSE module.
+     */
+    public function isHseModuleOnly(): bool
+    {
+        return $this->isHse() || $this->isResponsableHse();
+    }
+
     /**
      * Every site id this user may read/write. A superadmin's is unrestricted
      * (every site); a responsable's is exactly their assigned sites — this
