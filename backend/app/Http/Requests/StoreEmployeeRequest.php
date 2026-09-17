@@ -16,7 +16,7 @@ class StoreEmployeeRequest extends FormRequest
     {
         return [
             'full_name' => ['required', 'string', 'max:255'],
-            'site_id' => [$this->user()->isSuperAdmin() ? 'required' : 'nullable', 'exists:sites,id'],
+            'site_id' => [count($this->user()->assignedSiteIds()) === 1 ? 'nullable' : 'required', 'exists:sites,id'],
             'department_id' => ['nullable', 'exists:departments,id'],
             'position_id' => ['nullable', 'exists:positions,id'],
             'establishment' => ['nullable', 'string', 'max:255'],

@@ -13,10 +13,12 @@ use Illuminate\Support\Facades\DB;
  * - running_balance: the master/common caisse's real balance, moved only by
  *   `entry` (+, an outside recharge) and `expense` (-, a site's declared
  *   purchase — this is real money actually leaving the company).
- * - site_running_balance: a site's own remaining SPENDING LIMIT (not a
- *   separate pot of real money), moved only by `transfer` (+, the admin
- *   raises the site's limit) and `expense` (-, consumes it). Null for
- *   `entry` rows.
+ * - site_running_balance: the remaining SPENDING LIMIT of the transaction's
+ *   site's cash POOL (not a separate pot of real money) — see SiteCashPool:
+ *   two or more sites managed by the same responsable share ONE balance
+ *   rather than each having its own, so this is bucketed by pool, not by
+ *   raw site_id. Moved only by `transfer` (+, the admin raises the pool's
+ *   limit) and `expense` (-, consumes it). Null for `entry` rows.
  *
  * A `transfer` is deliberately NOT a real money movement: it never touches
  * `running_balance`. Giving Ben Guerir a 2000 DH limit does not remove
@@ -77,12 +79,12 @@ class CashLedgerService
     public function recalculate(CashAccount $account): void
     {
         $masterBalance = (string) $account->initial_balance;
-        $siteLimits = [];
+        $poolLimits = [];
 
         $account->transactions()
             ->orderBy('date')
             ->orderBy('id')
-            ->each(function (CashTransaction $transaction) use (&$masterBalance, &$siteLimits) {
+            ->each(function (CashTransaction $transaction) use (&$masterBalance, &$poolLimits) {
                 $siteLimit = null;
 
                 switch ($transaction->type) {
@@ -91,20 +93,23 @@ class CashLedgerService
                         break;
 
                     case 'transfer':
-                        // Raises the site's spending limit only — not a real
+                        // Raises the pool's spending limit only — not a real
                         // money movement, the master balance is untouched.
-                        $siteId = $transaction->site_id;
-                        $siteLimits[$siteId] = bcadd($siteLimits[$siteId] ?? '0.00', (string) $transaction->amount, 2);
-                        $siteLimit = $siteLimits[$siteId];
+                        // Bucketed by pool (see SiteCashPool), not raw
+                        // site_id: a transfer "to Bouchane" also raises what
+                        // Mzinda can spend when they share a responsable.
+                        $poolKey = $this->poolKey($transaction->site_id);
+                        $poolLimits[$poolKey] = bcadd($poolLimits[$poolKey] ?? '0.00', (string) $transaction->amount, 2);
+                        $siteLimit = $poolLimits[$poolKey];
                         break;
 
                     case 'expense':
                         // Real money spent: debits both the master balance
-                        // and the declaring site's remaining limit.
+                        // and the declaring site's pool's remaining limit.
                         $masterBalance = bcsub($masterBalance, (string) $transaction->amount, 2);
-                        $siteId = $transaction->site_id;
-                        $siteLimits[$siteId] = bcsub($siteLimits[$siteId] ?? '0.00', (string) $transaction->amount, 2);
-                        $siteLimit = $siteLimits[$siteId];
+                        $poolKey = $this->poolKey($transaction->site_id);
+                        $poolLimits[$poolKey] = bcsub($poolLimits[$poolKey] ?? '0.00', (string) $transaction->amount, 2);
+                        $siteLimit = $poolLimits[$poolKey];
                         break;
                 }
 
@@ -115,16 +120,27 @@ class CashLedgerService
             });
     }
 
+    protected function poolKey(?int $siteId): ?int
+    {
+        if ($siteId === null) {
+            return null;
+        }
+
+        $pool = SiteCashPool::forSite($siteId);
+        sort($pool);
+
+        return $pool[0];
+    }
+
     public function summary(CashAccount $account): array
     {
         $totalEntries = (float) $account->transactions()->where('type', 'entry')->sum('amount');
         $totalExpenses = (float) $account->transactions()->where('type', 'expense')->sum('amount');
 
-        $sites = Site::query()->orderBy('name')->get(['id', 'name'])->map(fn (Site $site) => [
-            'site_id' => $site->id,
-            'site_name' => $site->name,
-            'balance' => CashTransaction::currentSiteBalance($site->id),
-        ]);
+        // Grouped by cash pool (see SiteCashPool) so two sites sharing one
+        // responsable's common caisse show ONE combined line — never the
+        // same shared money counted twice under two different site names.
+        $sites = SiteCashPool::groupedBalances(Site::query()->orderBy('name')->pluck('id')->all());
 
         return [
             'initial_balance' => (float) $account->initial_balance,

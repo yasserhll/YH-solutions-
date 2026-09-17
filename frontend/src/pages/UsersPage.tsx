@@ -42,7 +42,7 @@ export default function UsersPage() {
       accessor: (u) => {
         if (u.sites.length === 0) return '—';
         if (u.sites.length === 1) return u.sites[0].name;
-        return `${u.site?.name} (+${u.sites.length - 1})`;
+        return u.sites.map((s) => s.name).join(', ');
       },
     },
     { header: 'Statut', accessor: (u) => <StatusBadge status={u.is_active ? 'actif' : 'sorti'} /> },
@@ -103,16 +103,14 @@ function UserFormModal({ user, onClose }: { user: User | null; onClose: () => vo
     password: '',
     role: (user?.role ?? 'responsable') as Role,
     site_ids: user?.sites.map((s) => s.id) ?? ([] as number[]),
-    active_site_id: user?.site?.id ?? null,
     is_active: user?.is_active ?? true,
   });
 
   function toggleSite(id: number) {
-    setForm((f) => {
-      const site_ids = f.site_ids.includes(id) ? f.site_ids.filter((x) => x !== id) : [...f.site_ids, id];
-      const active_site_id = site_ids.includes(f.active_site_id ?? -1) ? f.active_site_id : (site_ids[0] ?? null);
-      return { ...f, site_ids, active_site_id };
-    });
+    setForm((f) => ({
+      ...f,
+      site_ids: f.site_ids.includes(id) ? f.site_ids.filter((x) => x !== id) : [...f.site_ids, id],
+    }));
   }
 
   const mutation = useMutation({
@@ -162,26 +160,10 @@ function UserFormModal({ user, onClose }: { user: User | null; onClose: () => vo
                 ))}
               </div>
               <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-                Un responsable avec plusieurs sites travaille sur un seul à la fois et peut basculer entre eux depuis l'application.
+                Un responsable avec plusieurs sites travaille sur tous ces sites à la fois (dépenses, tableaux de bord,
+                rapports...) et choisit le site concerné à chaque enregistrement.
               </p>
             </div>
-            {form.site_ids.length > 1 && (
-              <SelectField
-                label="Site actif au départ"
-                required
-                value={form.active_site_id ?? ''}
-                onChange={(e) => setForm({ ...form, active_site_id: Number(e.target.value) })}
-              >
-                {form.site_ids.map((id) => {
-                  const site = sites?.find((s) => s.id === id);
-                  return site ? (
-                    <option key={id} value={id}>
-                      {site.name}
-                    </option>
-                  ) : null;
-                })}
-              </SelectField>
-            )}
           </>
         )}
         <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">

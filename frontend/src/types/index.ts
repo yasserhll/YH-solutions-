@@ -229,8 +229,15 @@ export interface CashTransaction {
   creator?: { id: number; name: string } | null;
 }
 
+/**
+ * One entry per cash POOL, not per site — two sites sharing one responsable's
+ * common caisse (see backend SiteCashPool) collapse into a single entry here,
+ * with `site_name` already joined ("Bouchane + Mzinda") and `site_ids`
+ * listing every site in that pool.
+ */
 export interface CashAccountSiteSummary {
   site_id: number;
+  site_ids: number[];
   site_name: string;
   balance: number;
 }
@@ -252,10 +259,13 @@ export interface CashAccount {
   summary: CashAccountSummary;
 }
 
-/** Responsable shape of GET /cash-account: only their own site's remaining limit. */
+/**
+ * Responsable shape of GET /cash-account: the remaining limit of every site
+ * assigned to them — all of them at once for a multi-site responsable, never
+ * another site's.
+ */
 export interface CashSiteBalance {
-  site_id: number;
-  site_balance: number;
+  sites: CashAccountSiteSummary[];
 }
 
 export interface Paginated<T> {
@@ -296,7 +306,7 @@ export interface DashboardData {
   };
   cash: {
     current_balance: number | null;
-    site_balance: number | null;
+    site_balances: CashAccountSiteSummary[] | null;
     expenses_today: number;
     expenses_month: number;
     total_expenses: number;

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -49,5 +50,31 @@ class Leave extends Model
     public function extensions(): HasMany
     {
         return $this->hasMany(LeaveExtension::class);
+    }
+
+    /**
+     * Sundays don't count as leave days — a leave "consumes" only the days
+     * actually taken off (Mon-Sat), so the end date must skip over them
+     * rather than counting 7 calendar days per week.
+     */
+    public static function endDateForDuration(Carbon $startDate, int $durationDays): Carbon
+    {
+        $date = $startDate->copy();
+        $counted = 0;
+
+        while (true) {
+            if (! $date->isSunday()) {
+                $counted++;
+                if ($counted === $durationDays) {
+                    return $date;
+                }
+            }
+            $date->addDay();
+        }
+    }
+
+    public static function extendEndDate(Carbon $previousEndDate, int $extraDays): Carbon
+    {
+        return self::endDateForDuration($previousEndDate->copy()->addDay(), $extraDays);
     }
 }

@@ -13,6 +13,7 @@ use App\Models\EmployeeExit;
 use App\Models\Leave;
 use App\Models\LeaveRequest;
 use App\Models\Suspension;
+use App\Services\SiteCashPool;
 use Illuminate\Http\Request;
 
 class DashboardController extends Controller
@@ -80,10 +81,14 @@ class DashboardController extends Controller
                 // Master balance: SuperAdmin only, never shown to a responsable.
                 // Never reduced by a transfer — only entries/expenses move it.
                 'current_balance' => $isSuperAdmin ? round(CashAccount::singleton()->currentBalance(), 2) : null,
-                // A responsable's own site's remaining spending limit; SuperAdmin has no single "own site".
-                'site_balance' => (! $isSuperAdmin && $request->user()->active_site_id)
-                    ? CashTransaction::currentSiteBalance($request->user()->active_site_id)
-                    : null,
+                // Every cash pool covering a responsable's assigned sites
+                // (see SiteCashPool) — two sites sharing one responsable's
+                // common caisse collapse into a single grouped entry, not
+                // two identical numbers. Null for a SuperAdmin, who has no
+                // "own sites" (they see the master balance instead).
+                'site_balances' => $isSuperAdmin ? null : SiteCashPool::groupedBalances(
+                    $request->user()->sites->pluck('id')->all()
+                ),
                 'expenses_today' => (float) (clone $this->scopeToSite(CashTransaction::query(), $request))
                     ->where('type', 'expense')->whereDate('date', $today)->sum('amount'),
                 'expenses_month' => (float) (clone $this->scopeToSite(CashTransaction::query(), $request))

@@ -4,17 +4,20 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\CashAccount;
-use App\Models\CashTransaction;
 use App\Services\CashLedgerService;
+use App\Services\SiteCashPool;
 use Illuminate\Http\Request;
 
 /**
  * `show` is reachable by any authenticated user (see routes/api.php), but its
  * response is shaped by role: a SuperAdmin gets the master account (their
  * real, full balance — never reduced by transfers, see CashLedgerService)
- * plus the summary, which now includes every site's remaining spending
- * limit (`summary.sites`) — while a responsable gets ONLY their own site's
- * derived limit — never the master balance, never other sites.
+ * plus the summary, which includes every site's remaining spending limit
+ * (`summary.sites`) — while a responsable gets ONLY the derived limit of
+ * each site assigned to them (all of them at once for a multi-site
+ * responsable) — never the master balance, never another site's limit. Two
+ * of their sites sharing one common caisse (see SiteCashPool) come back as
+ * ONE grouped entry, not two identical numbers.
  * `update` (editing initial_balance) stays SuperAdmin-only, per routes/api.php.
  */
 class CashAccountController extends Controller
@@ -34,11 +37,8 @@ class CashAccountController extends Controller
             ];
         }
 
-        abort_unless($user->active_site_id, 403, "Aucun site actif n'est sélectionné pour cet utilisateur.");
-
         return [
-            'site_id' => $user->active_site_id,
-            'site_balance' => CashTransaction::currentSiteBalance($user->active_site_id),
+            'sites' => SiteCashPool::groupedBalances($user->sites->pluck('id')->all()),
         ];
     }
 

@@ -6,8 +6,7 @@ import clsx from 'clsx';
 import { api, apiErrorMessage } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
 import { useUrlTab } from '../hooks/useUrlTab';
-import { useDepartments, usePositions, useSites } from '../hooks/useReferenceData';
-import { useAuth } from '../contexts/AuthContext';
+import { useDepartments, usePositions, useSelectableSites } from '../hooks/useReferenceData';
 import type { Employee, Entry, Exit, Paginated } from '../types';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Button';
@@ -197,11 +196,9 @@ export default function MovementsPage() {
 
 function EntryFormModal({ entry, onClose }: { entry: Entry | null; onClose: () => void }) {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
-  const isSuperAdmin = user?.role === 'superadmin';
   const { data: departments } = useDepartments();
   const { data: positions } = usePositions();
-  const { data: sites } = useSites();
+  const { sites, needsSiteSelect } = useSelectableSites();
   const [form, setForm] = useState({
     full_name: entry?.full_name ?? '',
     department_id: entry?.department_id ?? '',
@@ -232,10 +229,10 @@ function EntryFormModal({ entry, onClose }: { entry: Entry | null; onClose: () =
         className="space-y-4"
       >
         <TextField label="Nom complet" required value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} />
-        {isSuperAdmin && !entry && (
+        {needsSiteSelect && !entry && (
           <SelectField label="Site" required value={form.site_id} onChange={(e) => setForm({ ...form, site_id: e.target.value })}>
             <option value="">Sélectionner...</option>
-            {sites?.map((s) => (
+            {sites.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
               </option>
@@ -283,10 +280,8 @@ function EntryFormModal({ entry, onClose }: { entry: Entry | null; onClose: () =
 
 function ExitFormModal({ exit, onClose }: { exit: Exit | null; onClose: () => void }) {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
-  const isSuperAdmin = user?.role === 'superadmin';
   const { data: positions } = usePositions();
-  const { data: sites } = useSites();
+  const { sites, needsSiteSelect } = useSelectableSites();
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [manualMode, setManualMode] = useState(!!exit);
   const [form, setForm] = useState({
@@ -378,10 +373,10 @@ function ExitFormModal({ exit, onClose }: { exit: Exit | null; onClose: () => vo
                 </option>
               ))}
             </SelectField>
-            {isSuperAdmin && !exit && (
+            {needsSiteSelect && !exit && (
               <SelectField label="Site" required value={form.site_id} onChange={(e) => setForm({ ...form, site_id: e.target.value })}>
                 <option value="">Sélectionner...</option>
-                {sites?.map((s) => (
+                {sites.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
                   </option>

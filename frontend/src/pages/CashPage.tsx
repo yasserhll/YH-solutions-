@@ -6,7 +6,7 @@ import { Plus, Pencil, Trash2, Wallet, Settings2, Download } from 'lucide-react'
 import { api, apiErrorMessage, downloadFile } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
 import { useAuth } from '../contexts/AuthContext';
-import { useSites } from '../hooks/useReferenceData';
+import { useSelectableSites } from '../hooks/useReferenceData';
 import type { CashAccount, CashSiteBalance, CashTransaction, CashTransactionType, Paginated } from '../types';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Button';
@@ -192,12 +192,15 @@ export default function CashPage() {
 
       {!isSuperAdmin && siteBalance && (
         <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <KpiCard
-            label="Solde de mon site"
-            value={money(siteBalance.site_balance)}
-            icon={Wallet}
-            tone={siteBalance.site_balance <= 0 ? 'red' : 'green'}
-          />
+          {siteBalance.sites.map((s) => (
+            <KpiCard
+              key={s.site_id}
+              label={siteBalance.sites.length > 1 || s.site_ids.length > 1 ? `Solde ${s.site_name}` : 'Solde de mon site'}
+              value={money(s.balance)}
+              icon={Wallet}
+              tone={s.balance <= 0 ? 'red' : 'green'}
+            />
+          ))}
         </div>
       )}
 
@@ -266,7 +269,7 @@ export default function CashPage() {
 
 function TransactionFormModal({ transaction, onClose }: { transaction: CashTransaction | null; onClose: () => void }) {
   const { user } = useAuth();
-  const { data: sites } = useSites();
+  const { sites, needsSiteSelect } = useSelectableSites();
   const queryClient = useQueryClient();
   const isSuperAdmin = user?.role === 'superadmin';
 
@@ -316,8 +319,8 @@ function TransactionFormModal({ transaction, onClose }: { transaction: CashTrans
           </SelectField>
         ) : (
           <p className="rounded-lg bg-slate-50 dark:bg-slate-800 px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
-            Vous déclarez un achat (dépense) pour votre site, dans la limite du solde qui lui a été transféré par le
-            SuperAdmin.
+            Vous déclarez un achat (dépense) pour l'un de vos sites, dans la limite du solde qui lui a été transféré
+            par le SuperAdmin.
           </p>
         )}
         {isSuperAdmin && form.type === 'transfer' && (
@@ -326,7 +329,7 @@ function TransactionFormModal({ transaction, onClose }: { transaction: CashTrans
             autorisé pour le site sélectionné.
           </p>
         )}
-        {isSuperAdmin && (form.type === 'expense' || form.type === 'transfer') && (
+        {needsSiteSelect && (form.type === 'expense' || form.type === 'transfer') && (
           <SelectField
             label={form.type === 'transfer' ? 'Site destinataire' : 'Site'}
             required
@@ -334,7 +337,7 @@ function TransactionFormModal({ transaction, onClose }: { transaction: CashTrans
             onChange={(e) => setForm({ ...form, site_id: e.target.value })}
           >
             <option value="">Sélectionner...</option>
-            {sites?.map((s) => (
+            {sites.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
               </option>

@@ -6,7 +6,7 @@ import toast from 'react-hot-toast';
 import { api, apiErrorMessage } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
 import { useAuth } from '../contexts/AuthContext';
-import { useDepartments, usePositions, useSites } from '../hooks/useReferenceData';
+import { useDepartments, usePositions, useSelectableSites } from '../hooks/useReferenceData';
 import type { Employee, EmployeeStatus, Paginated } from '../types';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Button';
@@ -131,9 +131,14 @@ export default function PersonnelPage() {
 
 function EmployeeFormModal({ employee, isSuperAdmin, onClose }: { employee: Employee | null; isSuperAdmin: boolean; onClose: () => void }) {
   const queryClient = useQueryClient();
-  const { data: sites } = useSites();
+  const { sites, needsSiteSelect } = useSelectableSites();
   const { data: departments } = useDepartments();
   const { data: positions } = usePositions();
+  // A multi-site responsable must pick which of their sites a new employee
+  // belongs to; only a SuperAdmin may also change it on an existing one —
+  // the backend keeps a responsable's own edits pinned to the employee's
+  // current site regardless (see EmployeeController@update).
+  const showSiteSelect = isSuperAdmin || (needsSiteSelect && !employee);
 
   const [form, setForm] = useState({
     full_name: employee?.full_name ?? '',
@@ -166,10 +171,10 @@ function EmployeeFormModal({ employee, isSuperAdmin, onClose }: { employee: Empl
         className="space-y-4"
       >
         <TextField label="Nom complet" required value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} />
-        {isSuperAdmin && (
+        {showSiteSelect && (
           <SelectField label="Site" required value={form.site_id} onChange={(e) => setForm({ ...form, site_id: e.target.value })}>
             <option value="">Sélectionner...</option>
-            {sites?.map((s) => (
+            {sites.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
               </option>

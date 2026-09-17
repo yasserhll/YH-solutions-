@@ -5,7 +5,6 @@ namespace App\Models;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -21,22 +20,20 @@ class User extends Authenticatable
         'email',
         'password',
         'role',
-        'active_site_id',
         'is_active',
     ];
 
     protected $hidden = [
         'password',
         'remember_token',
-        'active_site_id',
-        'activeSite',
     ];
 
     /**
-     * Serialized as "site" (not the relation's own "active_site" key) so
-     * every endpoint that returns a raw User model — not just AuthController,
-     * which builds this shape by hand — agrees on the same field name the
-     * frontend's User/AuthUser types expect.
+     * Serialized as "site" (not the relation's own key) so every endpoint
+     * that returns a raw User model agrees on the same field name the
+     * frontend's User/AuthUser types expect. Only meaningful for a
+     * single-site responsable — a multi-site one has no one "current" site
+     * any more (see [[sites]]), so this is null for them and for a superadmin.
      */
     protected $appends = ['site'];
 
@@ -51,28 +48,17 @@ class User extends Authenticatable
 
     protected function site(): Attribute
     {
-        return Attribute::make(get: fn () => $this->activeSite);
+        return Attribute::make(get: fn () => $this->sites->count() === 1 ? $this->sites->first() : null);
     }
 
     /**
-     * Every site this responsable is assigned to. A superadmin has no rows
-     * here — their access is unrestricted regardless of this relation.
+     * Every site this responsable is assigned to — usable simultaneously,
+     * not one-at-a-time. A superadmin has no rows here; their access is
+     * unrestricted regardless of this relation (see assignedSiteIds).
      */
     public function sites(): BelongsToMany
     {
         return $this->belongsToMany(Site::class, 'site_user');
-    }
-
-    /**
-     * The one site a responsable is currently working in. All site-scoped
-     * reads/writes for a responsable are forced onto this site, never onto
-     * their other assigned sites, until they switch it — see
-     * InteractsWithSites, which is the only place besides the switch-site
-     * endpoint that's allowed to rely on this for authorization.
-     */
-    public function activeSite(): BelongsTo
-    {
-        return $this->belongsTo(Site::class, 'active_site_id');
     }
 
     public function isSuperAdmin(): bool
@@ -81,22 +67,27 @@ class User extends Authenticatable
     }
 
     /**
-     * Is this the site the user is currently working in? Used to gate every
-     * site-scoped read/write — deliberately narrower than "is this site
-     * assigned to the user" (see hasSiteAssigned), so a multi-site
-     * responsable can't act on a site they haven't switched to.
+     * Every site id this user may read/write. A superadmin's is unrestricted
+     * (every site); a responsable's is exactly their assigned sites — this
+     * is the set InteractsWithSites scopes every query and write to, so a
+     * multi-site responsable (e.g. assigned to Bouchane + Mzinda) sees both
+     * at once rather than one at a time.
      */
-    public function canAccessSite(int $siteId): bool
+    public function assignedSiteIds(): array
     {
-        return $this->isSuperAdmin() || $this->active_site_id === $siteId;
+        if ($this->isSuperAdmin()) {
+            return Site::pluck('id')->all();
+        }
+
+        return $this->sites->pluck('id')->all();
     }
 
     /**
-     * Is this one of the sites the user is allowed to switch their active
-     * site to? Used only by the active-site switch endpoint.
+     * Is this one of the sites the user is allowed to read/write? Used by
+     * InteractsWithSites for every site-scoped check.
      */
-    public function hasSiteAssigned(int $siteId): bool
+    public function canAccessSite(int $siteId): bool
     {
-        return $this->isSuperAdmin() || $this->sites()->where('sites.id', $siteId)->exists();
+        return $this->isSuperAdmin() || in_array($siteId, $this->assignedSiteIds(), true);
     }
 }

@@ -42,7 +42,7 @@ class LeaveController extends Controller
         $data['site_id'] = $employee->site_id;
         $data['created_by'] = $request->user()->id;
         $data['status'] = 'en_cours';
-        $data['end_date'] = Carbon::parse($data['start_date'])->addDays($data['duration_days'] - 1);
+        $data['end_date'] = Leave::endDateForDuration(Carbon::parse($data['start_date']), $data['duration_days']);
 
         $leave = Leave::create($data);
 
@@ -60,7 +60,7 @@ class LeaveController extends Controller
 
         return DB::transaction(function () use ($leave, $data, $request) {
             $previousEndDate = $leave->end_date;
-            $newEndDate = Carbon::parse($previousEndDate)->addDays($data['extra_days']);
+            $newEndDate = Leave::extendEndDate(Carbon::parse($previousEndDate), $data['extra_days']);
 
             $leave->extensions()->create([
                 'extra_days' => $data['extra_days'],
@@ -84,7 +84,7 @@ class LeaveController extends Controller
         $this->ensureSiteAccess($request, $leave->site_id);
 
         $data = $request->validated();
-        $data['end_date'] = Carbon::parse($data['start_date'])->addDays($data['duration_days'] - 1);
+        $data['end_date'] = Leave::endDateForDuration(Carbon::parse($data['start_date']), $data['duration_days']);
         $leave->update($data);
 
         return $leave->load(['employee', 'site', 'extensions']);

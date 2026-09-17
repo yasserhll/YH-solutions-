@@ -140,7 +140,6 @@ class DatabaseSeeder extends Seeder
                 'email' => 'responsable.'.Str::slug($siteName).'@transwin-mining.com',
                 'password' => Hash::make('password'),
                 'role' => 'responsable',
-                'active_site_id' => $site->id,
             ]);
             $responsable->sites()->attach($site->id);
 
@@ -321,5 +320,26 @@ class DatabaseSeeder extends Seeder
 
             $siteIndex++;
         }
+
+        // Demo multi-site responsable — assigned to Bouchane AND Mzinda at
+        // once (not one-at-a-time), to exercise/demo that a multi-site
+        // responsable's dashboards, KPIs and caisse aggregate both sites,
+        // while every create (entries, exits, cash expenses...) requires
+        // an explicit Site selector restricted to just these two.
+        $fatima = User::create([
+            'name' => 'Fatima Zahra (multi-site)',
+            'email' => 'fatima.multisite@transwin-mining.com',
+            'password' => Hash::make('password'),
+            'role' => 'responsable',
+        ]);
+        $fatima->sites()->attach([$sites['Bouchane']->id, $sites['Mzinda']->id]);
+
+        // Bouchane and Mzinda's cash transactions above were seeded before
+        // Fatima existed, so their site_running_balance was computed without
+        // pooling yet — recalculate now so the demo data is immediately
+        // correct (a real request would trigger this the same way via
+        // UserController, see recalculateCashPools() there) rather than only
+        // becoming right after the next cash transaction happens to run.
+        $ledger->recalculate($cashAccount);
     }
 }

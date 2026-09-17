@@ -22,13 +22,12 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import clsx from 'clsx';
-import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { useSiteFilter } from '../contexts/SiteFilterContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useQuery } from '@tanstack/react-query';
-import { api, apiErrorMessage } from '../api/client';
-import type { AuthUser, Site } from '../types';
+import { api } from '../api/client';
+import type { Site } from '../types';
 import { Brand } from '../components/ui/Brand';
 
 function dropdownOptionClass(active: boolean) {
@@ -69,11 +68,15 @@ export function DashboardLayout() {
   const [desktopOpen, setDesktopOpen] = useState(true);
   const isSuperAdmin = user?.role === 'superadmin';
 
-  const { data: sites } = useQuery({
+  const { data: allSites } = useQuery({
     queryKey: ['sites'],
     queryFn: () => api.get<Site[]>('/sites').then((r) => r.data),
     enabled: isSuperAdmin,
   });
+  // A multi-site responsable gets the same view filter a SuperAdmin gets —
+  // "Tous" (aggregating every site assigned to them) plus a per-site tab —
+  // just restricted to their own assigned sites instead of every site.
+  const filterableSites = isSuperAdmin ? (allSites ?? []) : (user?.sites ?? []);
 
   function toggleSidebar() {
     setMobileOpen((o) => !o);
@@ -174,10 +177,8 @@ export function DashboardLayout() {
             <PanelLeft size={20} />
           </button>
           <div className="ml-auto min-w-0">
-            {isSuperAdmin ? (
-              <SiteSwitcher sites={sites ?? []} />
-            ) : user && user.sites.length > 1 ? (
-              <ActiveSiteSwitcher user={user} />
+            {isSuperAdmin || filterableSites.length > 1 ? (
+              <SiteSwitcher sites={filterableSites} />
             ) : (
               <div className="flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">
                 <MapPin size={14} className="text-orange-500" />
@@ -260,62 +261,5 @@ function SiteSwitcher({ sites }: { sites: Site[] }) {
         )}
       </div>
     </>
-  );
-}
-
-/**
- * For a responsable assigned to more than one site — lets them switch which
- * one they're currently working in. Unlike SiteSwitcher (a SuperAdmin's view
- * filter, sent as an optional ?site_id= query param the backend never fully
- * trusts), switching here calls the backend to persist the new active site,
- * because every read/write for a responsable is scoped server-side to
- * exactly that site (see InteractsWithSites) — there is no "Tous" option.
- */
-function ActiveSiteSwitcher({ user }: { user: AuthUser }) {
-  const { switchActiveSite } = useAuth();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [pending, setPending] = useState(false);
-
-  async function handleSelect(siteId: number) {
-    setMenuOpen(false);
-    if (siteId === user.site?.id) return;
-    setPending(true);
-    try {
-      await switchActiveSite(siteId);
-    } catch (err) {
-      toast.error(apiErrorMessage(err, 'Impossible de changer de site.'));
-    } finally {
-      setPending(false);
-    }
-  }
-
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        disabled={pending}
-        onClick={() => setMenuOpen((o) => !o)}
-        onBlur={() => setTimeout(() => setMenuOpen(false), 150)}
-        className="flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700 disabled:opacity-60 dark:bg-slate-800 dark:text-slate-300"
-      >
-        <MapPin size={14} className="shrink-0 text-orange-500" />
-        <span className="max-w-[8rem] truncate">{user.site?.name ?? 'Sélectionner un site'}</span>
-        <ChevronDown size={14} className={clsx('shrink-0 text-slate-400 transition-transform', menuOpen && 'rotate-180')} />
-      </button>
-      {menuOpen && (
-        <div className="absolute right-0 z-20 mt-1.5 w-48 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
-          {user.sites.map((site) => (
-            <button
-              key={site.id}
-              type="button"
-              onMouseDown={() => handleSelect(site.id)}
-              className={dropdownOptionClass(site.id === user.site?.id)}
-            >
-              {site.name}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
   );
 }

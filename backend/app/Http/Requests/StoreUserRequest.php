@@ -21,7 +21,6 @@ class StoreUserRequest extends FormRequest
             'role' => ['required', Rule::in(['superadmin', 'responsable'])],
             'site_ids' => ['required_if:role,responsable', 'array', 'min:1'],
             'site_ids.*' => ['integer', 'exists:sites,id'],
-            'active_site_id' => ['nullable', 'integer', 'exists:sites,id'],
             'is_active' => ['sometimes', 'boolean'],
         ];
     }

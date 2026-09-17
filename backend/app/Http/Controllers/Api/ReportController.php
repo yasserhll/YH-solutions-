@@ -40,27 +40,29 @@ class ReportController extends Controller
 
     /**
      * Every export filename carries which site it covers, mirroring exactly
-     * what the on-screen table is scoped to: a responsable's own site name,
-     * a superadmin's currently-selected site (via ?site_id=), or "tous-sites"
-     * when a superadmin has no site filter applied. Never trust a query
-     * site_id blindly here either — it only ever narrows what scopeToSite()
-     * already allowed the user to see.
+     * what the on-screen table is scoped to: whichever site is selected via
+     * ?site_id= (validated against the user's own assigned sites — a
+     * responsable can never force another site's name into their filename),
+     * a single-site responsable's own site name when no filter is applied,
+     * "tous-sites" for a superadmin with no filter, or "mes-sites" for a
+     * multi-site responsable viewing all of their sites at once.
      */
     protected function exportSiteLabel(Request $request): string
     {
         $user = $request->user();
 
-        if (! $user->isSuperAdmin()) {
-            return $user->activeSite ? Str::slug($user->activeSite->name) : 'site';
-        }
-
         if ($siteId = $request->query('site_id')) {
+            $this->ensureSiteAccess($request, (int) $siteId);
             $site = Site::find($siteId);
 
             return $site ? Str::slug($site->name) : 'site';
         }
 
-        return 'tous-sites';
+        if ($user->isSuperAdmin()) {
+            return 'tous-sites';
+        }
+
+        return $user->site ? Str::slug($user->site->name) : 'mes-sites';
     }
 
     protected function attendanceQuery(Request $request): Builder

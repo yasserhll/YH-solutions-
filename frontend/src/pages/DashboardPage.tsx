@@ -143,15 +143,16 @@ export default function DashboardPage() {
                 to="/caisse"
               />
             )}
-            {data.cash.site_balance !== null && (
+            {data.cash.site_balances?.map((s) => (
               <KpiCard
-                label="Solde de mon site"
-                value={money(data.cash.site_balance)}
+                key={s.site_id}
+                label={data.cash.site_balances!.length > 1 || s.site_ids.length > 1 ? `Solde ${s.site_name}` : 'Solde de mon site'}
+                value={money(s.balance)}
                 icon={Wallet}
-                tone={data.cash.site_balance <= 0 ? 'red' : 'green'}
+                tone={s.balance <= 0 ? 'red' : 'green'}
                 to="/caisse"
               />
-            )}
+            ))}
             <KpiCard label="Dépenses du mois" value={money(data.cash.expenses_month)} icon={TrendingDown} tone="red" to="/caisse" />
           </div>
         </section>
