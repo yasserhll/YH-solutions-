@@ -1,28 +1,35 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { registerSW } from 'virtual:pwa-register';
 import toast from 'react-hot-toast';
-import { WifiOff, DownloadCloud } from 'lucide-react';
+import { WifiOff, DownloadCloud, RefreshCw } from 'lucide-react';
 
 /**
- * Registers the service worker and surfaces the two things a user actually
- * needs to know about a PWA: "you're offline, your changes will sync later"
- * and "you're now on the latest version". Mount once, near the root — has
- * no visual footprint beyond toasts/the offline banner.
+ * Registers the service worker and surfaces the things a user actually needs
+ * to know about a PWA: "you're offline, your changes will sync later" and
+ * "a new version is ready". Mount once, near the root.
  *
- * Updates are applied automatically (no "click to update" prompt): this app
- * changes constantly, and leaving a fix sitting inert on an already-open tab
- * or an already-installed device until someone notices a toast is worse than
- * an occasional automatic reload. See onNeedRefresh below.
+ * Updates are user-triggered via a persistent bottom banner (RECHARGER), at
+ * the user's explicit request — not applied silently. `onNeedRefresh` just
+ * flips `needRefresh`; the banner's button is what actually calls
+ * `updateSW(true)`, which activates the waiting service worker and reloads
+ * the page for the new version — the same effect as a hard refresh, but
+ * going through the proper PWA update path (skip-waiting + controllerchange)
+ * rather than a plain `location.reload()`, which wouldn't hand control to
+ * the new worker on its own. The banner is persistent (not a toast) and the
+ * existing 30-minute poll (`onRegisteredSW`) still re-checks for updates on
+ * a long-lived tab, so a shipped fix can't go unnoticed the way an ephemeral
+ * toast could.
  */
 export function PwaStatus() {
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [needRefresh, setNeedRefresh] = useState(false);
+  const updateSWRef = useRef<((reloadPage?: boolean) => Promise<void>) | null>(null);
 
   useEffect(() => {
     const updateSW = registerSW({
       immediate: true,
       onNeedRefresh() {
-        toast.loading('Mise à jour de l\'application...', { id: 'pwa-update', duration: 2000 });
-        updateSW(true);
+        setNeedRefresh(true);
       },
       onOfflineReady() {
         toast.success('Application prête pour un usage hors connexion.', {
@@ -36,11 +43,13 @@ export function PwaStatus() {
       onRegisteredSW(_url, registration) {
         // A long-lived tab (this is the kind of app people leave open all
         // day) otherwise only checks for a new version on navigation —
-        // poll too, so a fix ships without anyone needing to close the tab.
+        // poll too, so the RECHARGER banner can appear without anyone
+        // needing to close the tab first.
         if (!registration) return;
         setInterval(() => registration.update(), 30 * 60 * 1000);
       },
     });
+    updateSWRef.current = updateSW;
 
     function goOffline() {
       setIsOffline(true);
@@ -57,12 +66,34 @@ export function PwaStatus() {
     };
   }, []);
 
-  if (!isOffline) return null;
+  function reloadForUpdate() {
+    updateSWRef.current?.(true);
+  }
+
+  if (!isOffline && !needRefresh) return null;
 
   return (
-    <div className="fixed inset-x-0 top-0 z-[60] flex items-center justify-center gap-2 bg-amber-500 py-1.5 text-xs font-medium text-white shadow">
-      <WifiOff size={13} />
-      Hors connexion — vous consultez les dernières données enregistrées, vos actions seront synchronisées au retour du réseau.
-    </div>
+    <>
+      {isOffline && (
+        <div className="fixed inset-x-0 top-0 z-[60] flex items-center justify-center gap-2 bg-amber-500 py-1.5 text-xs font-medium text-white shadow">
+          <WifiOff size={13} />
+          Hors connexion — vous consultez les dernières données enregistrées, vos actions seront synchronisées au retour du réseau.
+        </div>
+      )}
+      {needRefresh && (
+        <div className="fixed inset-x-0 bottom-0 z-[60] flex flex-wrap items-center justify-center gap-3 border-t border-sky-300/20 bg-sky-500/10 px-4 py-3 text-sm font-medium text-white shadow-lg backdrop-blur-sm">
+          <RefreshCw size={16} className="shrink-0 text-sky-300" />
+          <span>Une nouvelle version est disponible.</span>
+          <button
+            type="button"
+            onClick={reloadForUpdate}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-b from-sky-500 to-blue-600 px-4 py-1.5 text-xs font-semibold text-white shadow-md shadow-blue-950/40 ring-1 ring-inset ring-white/10 transition-colors hover:from-sky-400 hover:to-blue-500"
+          >
+            <RefreshCw size={13} />
+            Recharger
+          </button>
+        </div>
+      )}
+    </>
   );
 }
