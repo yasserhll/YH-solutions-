@@ -47,7 +47,7 @@ class SuspensionController extends Controller
         $this->ensureSiteAccess($request, $employee->site_id);
 
         $data['site_id'] = $employee->site_id;
-        $data['end_date'] = Carbon::parse($data['start_date'])->addDays($data['duration_days'] - 1);
+        $data['end_date'] = Suspension::endDateForDuration(Carbon::parse($data['start_date']), $data['duration_days']);
         $data['created_by'] = $request->user()->id;
 
         $suspension = Suspension::create($data);
@@ -59,7 +59,7 @@ class SuspensionController extends Controller
     {
         $this->ensureSiteAccess($request, $suspension->site_id);
         $data = $request->validate($this->rules());
-        $data['end_date'] = Carbon::parse($data['start_date'])->addDays($data['duration_days'] - 1);
+        $data['end_date'] = Suspension::endDateForDuration(Carbon::parse($data['start_date']), $data['duration_days']);
         $suspension->update($data);
 
         return $suspension->load(['employee', 'site']);

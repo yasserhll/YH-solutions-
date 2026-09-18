@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard,
@@ -8,6 +8,7 @@ import {
   ShieldAlert,
   ArrowLeftRight,
   Briefcase,
+  Timer,
   Wallet,
   Users,
   UserCog,
@@ -61,8 +62,17 @@ const navItems = [
   { to: '/hse/rapports', label: 'Rapports HSE', icon: HardHat, superadminOnly: true },
   { to: '/mouvements', label: 'Entrées / Sorties', icon: ArrowLeftRight },
   { to: '/affectations', label: 'Affectations', icon: Briefcase },
+  { to: '/heures-supplementaires', label: 'Heures supplémentaires', icon: Timer },
   { to: '/caisse', label: 'Caisse', icon: Wallet },
   { to: '/personnel', label: 'Personnel', icon: Users },
+];
+
+// Grouped under the single "Paramètres" sidebar entry instead of three
+// separate top-level links — clicking it expands this list in place rather
+// than navigating anywhere itself. "Rapports" stays visible to everyone
+// (a plain responsable already had it); Utilisateurs/Paramètres stay
+// superadminOnly, same restriction as before, just relocated.
+const settingsNavItems = [
   { to: '/utilisateurs', label: 'Utilisateurs', icon: UserCog, superadminOnly: true },
   { to: '/rapports', label: 'Rapports', icon: FileBarChart },
   { to: '/parametres', label: 'Paramètres', icon: Settings, superadminOnly: true },
@@ -123,6 +133,12 @@ export function DashboardLayout() {
   const isSuperAdmin = user?.role === 'superadmin';
   const isResponsableHse = user?.role === 'responsable_hse';
   const isHseOnly = user?.role === 'hse' || isResponsableHse;
+
+  const location = useLocation();
+  const visibleSettingsItems = settingsNavItems.filter((item) => !item.superadminOnly || isSuperAdmin);
+  // Starts expanded when already sitting on one of its own pages (e.g. a
+  // reload on /rapports), so the active link isn't hidden behind a click.
+  const [settingsOpen, setSettingsOpen] = useState(() => visibleSettingsItems.some((item) => location.pathname.startsWith(item.to)));
 
   const { data: allSites } = useQuery({
     queryKey: ['sites'],
@@ -187,6 +203,44 @@ export function DashboardLayout() {
                 {item.label}
               </NavLink>
             ))}
+
+          {/* Utilisateurs/Rapports/Paramètres collapsed into one entry — not
+              part of the HSE module, so hidden for hse/responsable_hse. */}
+          {!isHseOnly && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setSettingsOpen((o) => !o)}
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <Settings size={18} />
+                <span className="flex-1 text-left">Paramètres</span>
+                <ChevronDown size={16} className={clsx('shrink-0 transition-transform', settingsOpen && 'rotate-180')} />
+              </button>
+              {settingsOpen && (
+                <div className="mt-1 space-y-1 border-l border-slate-200 dark:border-slate-800 pl-3">
+                  {visibleSettingsItems.map((item) => (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      onClick={() => setMobileOpen(false)}
+                      className={({ isActive }) =>
+                        clsx(
+                          'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                          isActive
+                            ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
+                        )
+                      }
+                    >
+                      <item.icon size={18} />
+                      {item.label}
+                    </NavLink>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </nav>
 
         {/* User identity, theme toggle, and logout live here — not in the

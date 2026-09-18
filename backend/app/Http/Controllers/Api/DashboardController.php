@@ -13,6 +13,7 @@ use App\Models\EmployeeExit;
 use App\Models\Leave;
 use App\Models\LeaveRequest;
 use App\Models\Suspension;
+use App\Services\AttendanceAutomation;
 use App\Services\SiteCashPool;
 use Illuminate\Http\Request;
 
@@ -29,6 +30,15 @@ class DashboardController extends Controller
         $activeEmployees = (clone $employees)->where('status', 'actif');
 
         $attendanceToday = $this->scopeToSite(Attendance::query(), $request)->whereDate('date', $today);
+
+        // Employees currently in an active Maladie/Congé/Mise à pied period
+        // never get a real Attendance row for it any more (see
+        // AttendanceAutomation) — fold their auto-derived cause into today's
+        // counts too, or the dashboard would silently undercount them.
+        $employeesWithRealRowToday = (clone $attendanceToday)->pluck('employee_id')->all();
+        $employeesNeedingAuto = (clone $activeEmployees)->whereNotIn('id', $employeesWithRealRowToday)->pluck('id')->all();
+        $autoCausesToday = AttendanceAutomation::causesForDate($employeesNeedingAuto, $today);
+        $autoCauseCounts = array_count_values($autoCausesToday);
 
         $leaveRequests = $this->scopeToSite(LeaveRequest::query(), $request);
         $leaves = $this->scopeToSite(Leave::query(), $request);
@@ -53,18 +63,18 @@ class DashboardController extends Controller
             'personnel' => [
                 'total' => (clone $activeEmployees)->count(),
                 'present_today' => (clone $attendanceToday)->where('status', 'present')->count(),
-                'absent_today' => (clone $attendanceToday)->where('status', 'absent')->count(),
+                'absent_today' => (clone $attendanceToday)->where('status', 'absent')->count() + count($autoCausesToday),
                 'leaves_in_progress' => (clone $leaves)->where('status', 'en_cours')->count(),
                 'new_employees_30d' => (clone $employees)->where('entry_date', '>=', now()->subDays(30))->count(),
                 'recent_exits_30d' => (clone $exits)->where('exit_date', '>=', now()->subDays(30))->count(),
             ],
             'attendance' => [
                 'present' => (clone $attendanceToday)->where('status', 'present')->count(),
-                'absent_maladie' => (clone $attendanceToday)->where('absence_cause', 'maladie')->count(),
+                'absent_maladie' => (clone $attendanceToday)->where('absence_cause', 'maladie')->count() + ($autoCauseCounts['maladie'] ?? 0),
                 'absent_autorisee' => (clone $attendanceToday)->where('absence_cause', 'autorisee')->count(),
                 'absent_non_autorisee' => (clone $attendanceToday)->where('absence_cause', 'non_autorisee')->count(),
-                'absent_mise_a_pied' => (clone $attendanceToday)->where('absence_cause', 'mise_a_pied')->count(),
-                'absent_conge' => (clone $attendanceToday)->where('absence_cause', 'conge')->count(),
+                'absent_mise_a_pied' => (clone $attendanceToday)->where('absence_cause', 'mise_a_pied')->count() + ($autoCauseCounts['mise_a_pied'] ?? 0),
+                'absent_conge' => (clone $attendanceToday)->where('absence_cause', 'conge')->count() + ($autoCauseCounts['conge'] ?? 0),
                 'absent_stc' => (clone $attendanceToday)->where('absence_cause', 'stc')->count(),
             ],
             'leaves' => [

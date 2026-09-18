@@ -14,8 +14,11 @@ use App\Http\Controllers\Api\ExitController;
 use App\Http\Controllers\Api\HolidayController;
 use App\Http\Controllers\Api\HseReportController;
 use App\Http\Controllers\Api\HseUserController;
+use App\Http\Controllers\Api\IllnessController;
 use App\Http\Controllers\Api\LeaveController;
 use App\Http\Controllers\Api\LeaveRequestController;
+use App\Http\Controllers\Api\OvertimeEntryController;
+use App\Http\Controllers\Api\OvertimeMonthController;
 use App\Http\Controllers\Api\PositionController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SiteController;
@@ -74,6 +77,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::apiResource('disciplinary-warnings', DisciplinaryWarningController::class)->except(['show']);
         Route::apiResource('suspensions', SuspensionController::class)->except(['show']);
+        Route::apiResource('illnesses', IllnessController::class)->only(['index', 'store', 'update', 'destroy']);
 
         Route::apiResource('assignments', AssignmentController::class)->only(['index', 'store', 'update', 'destroy']);
         Route::apiResource('entries', EntryController::class)->only(['index', 'store', 'update', 'destroy']);
@@ -93,6 +97,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::apiResource('cash-transactions', CashTransactionController::class)->only(['index', 'store']);
         Route::get('/cash-account', [CashAccountController::class, 'show']);
+
+        Route::apiResource('overtime-entries', OvertimeEntryController::class)->only(['index', 'store', 'update', 'destroy']);
+        Route::get('/overtime-months', [OvertimeMonthController::class, 'index']);
 
         Route::get('/reports/attendance', [ReportController::class, 'attendance']);
         Route::get('/reports/leaves', [ReportController::class, 'leaves']);

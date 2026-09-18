@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import { UserX, Pencil, Download, CalendarOff, Trash2, X } from 'lucide-react';
 import { api, apiErrorMessage, downloadFile } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
-import type { AbsenceCause, DailyAttendanceRow, DailyAttendanceSheet } from '../types';
+import type { AbsenceCause, DailyAttendanceRow, DailyAttendanceSheet, Employee, Illness, Paginated } from '../types';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Button';
 import { SearchInput } from '../components/ui/SearchInput';
@@ -13,6 +13,8 @@ import { StatusBadge } from '../components/ui/StatusBadge';
 import { Modal } from '../components/ui/Modal';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { SelectField, TextAreaField, TextField } from '../components/ui/Field';
+import { EmployeeSelect } from '../components/ui/EmployeeSelect';
+import { DataTable, type Column } from '../components/ui/DataTable';
 
 const causeLabels: Record<AbsenceCause, string> = {
   maladie: 'Maladie',
@@ -34,6 +36,8 @@ export default function AttendancePage() {
   const [showHolidayForm, setShowHolidayForm] = useState(false);
   const [confirmRemoveHoliday, setConfirmRemoveHoliday] = useState(false);
   const [cancelStcTarget, setCancelStcTarget] = useState<DailyAttendanceRow | null>(null);
+  const [editingIllness, setEditingIllness] = useState<Illness | null>(null);
+  const [deletingIllness, setDeletingIllness] = useState<Illness | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['attendance-daily', siteParams, date, search, statusFilter],
@@ -41,6 +45,22 @@ export default function AttendancePage() {
       api
         .get<DailyAttendanceSheet>('/attendance/daily', { params: { ...siteParams, date, search: search || undefined, status: statusFilter || undefined } })
         .then((r) => r.data),
+  });
+
+  const illnessesQuery = useQuery({
+    queryKey: ['illnesses', siteParams],
+    queryFn: () => api.get<Paginated<Illness>>('/illnesses', { params: { ...siteParams, per_page: 50 } }).then((r) => r.data),
+  });
+
+  const deleteIllnessMutation = useMutation({
+    mutationFn: (id: number) => api.delete(`/illnesses/${id}`),
+    onSuccess: () => {
+      toast.success('Période de maladie supprimée.');
+      queryClient.invalidateQueries({ queryKey: ['illnesses'] });
+      queryClient.invalidateQueries({ queryKey: ['attendance-daily'] });
+      setDeletingIllness(null);
+    },
+    onError: (err) => toast.error(apiErrorMessage(err)),
   });
 
   const exportMutation = useMutation({
@@ -111,6 +131,30 @@ export default function AttendancePage() {
     }
     cancelAttendance.mutate(row);
   }
+
+  const illnessColumns: Column<Illness>[] = [
+    { header: 'Employé', accessor: (i) => i.employee?.full_name },
+    { header: 'Site', accessor: (i) => i.site?.name },
+    { header: 'Début', accessor: (i) => new Date(i.start_date).toLocaleDateString('fr-FR') },
+    { header: 'Fin', accessor: (i) => new Date(i.end_date).toLocaleDateString('fr-FR') },
+    { header: 'Description', accessor: (i) => i.description ?? '—' },
+    {
+      header: 'Actions',
+      accessor: (i) => (
+        <div className="flex items-center gap-1">
+          <button
+            className="rounded-md p-1.5 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+            onClick={() => setEditingIllness(i)}
+          >
+            <Pencil size={14} />
+          </button>
+          <button className="rounded-md p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10" onClick={() => setDeletingIllness(i)}>
+            <Trash2 size={14} />
+          </button>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div>
@@ -265,6 +309,19 @@ export default function AttendancePage() {
         )}
       </div>
 
+      <div className="mt-6">
+        <h3 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">Périodes de maladie déclarées</h3>
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+          <DataTable
+            columns={illnessColumns}
+            rows={illnessesQuery.data?.data ?? []}
+            isLoading={illnessesQuery.isLoading}
+            keyFn={(i) => i.id}
+            emptyMessage="Aucune période de maladie déclarée."
+          />
+        </div>
+      </div>
+
       {absenceTarget && (
         <AbsenceModal
           date={date}
@@ -278,6 +335,17 @@ export default function AttendancePage() {
       )}
 
       {showHolidayForm && <HolidayFormModal date={date} onClose={() => setShowHolidayForm(false)} />}
+
+      {editingIllness && <IllnessFormModal illness={editingIllness} onClose={() => setEditingIllness(null)} />}
+
+      <ConfirmDialog
+        open={!!deletingIllness}
+        title="Supprimer cette période de maladie"
+        message={`Voulez-vous vraiment supprimer cette période de maladie pour ${deletingIllness?.employee?.full_name} ? L'employé redeviendra disponible normalement pour ces dates.`}
+        onCancel={() => setDeletingIllness(null)}
+        onConfirm={() => deletingIllness && deleteIllnessMutation.mutate(deletingIllness.id)}
+        isLoading={deleteIllnessMutation.isPending}
+      />
 
       <ConfirmDialog
         open={!!cancelStcTarget}
@@ -361,20 +429,40 @@ function AbsenceModal({
   const isCorrection = !isBulk && target.status === 'absent';
   const [cause, setCause] = useState<AbsenceCause>(isCorrection && target.absence_cause ? target.absence_cause : 'maladie');
   const [description, setDescription] = useState(isCorrection ? (target.description ?? '') : '');
+  // Only used when cause === 'maladie' — declaring a Maladie always covers a
+  // date range (see Illness/AttendanceAutomation backend-side), defaulting
+  // to just this one day but editable to cover more.
+  const [illnessStart, setIllnessStart] = useState(date);
+  const [illnessEnd, setIllnessEnd] = useState(date);
 
   const mutation = useMutation({
     mutationFn: async (): Promise<unknown> => {
+      const targets = isBulk ? target : [target];
+
+      if (cause === 'maladie') {
+        return Promise.all(
+          targets.map((t) =>
+            api.post('/illnesses', {
+              employee_id: t.employee_id,
+              start_date: illnessStart,
+              end_date: illnessEnd,
+              description,
+            }),
+          ),
+        );
+      }
+
       if (isBulk) {
         return api.post('/attendance/bulk', {
           date,
-          employee_ids: target.map((t) => t.employee_id),
+          employee_ids: targets.map((t) => t.employee_id),
           status: 'absent',
           absence_cause: cause,
           description,
         });
       }
       return api.post('/attendance', {
-        employee_id: target.employee_id,
+        employee_id: targets[0].employee_id,
         date,
         status: 'absent',
         absence_cause: cause,
@@ -383,6 +471,9 @@ function AbsenceModal({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['attendance-daily'] });
+      if (cause === 'maladie') {
+        queryClient.invalidateQueries({ queryKey: ['illnesses'] });
+      }
       if (cause === 'stc') {
         queryClient.invalidateQueries({ queryKey: ['employees'] });
         queryClient.invalidateQueries({ queryKey: ['exits'] });
@@ -413,6 +504,36 @@ function AbsenceModal({
           <option value="mise_a_pied">Mise à pied</option>
           <option value="stc">STC (départ définitif)</option>
         </SelectField>
+        {cause === 'maladie' ? (
+          <div className="grid grid-cols-2 gap-3">
+            <TextField
+              label="Date de début"
+              type="date"
+              required
+              value={illnessStart}
+              onChange={(e) => setIllnessStart(e.target.value)}
+            />
+            <TextField
+              label="Date de fin"
+              type="date"
+              required
+              min={illnessStart}
+              value={illnessEnd}
+              onChange={(e) => setIllnessEnd(e.target.value)}
+            />
+          </div>
+        ) : (
+          // Congé/Mise à pied normalement suivis depuis leurs propres pages
+          // (Congés/Sanctions) — le pointage y sera automatiquement synchronisé
+          // (voir la période active correspondante) ; ce choix ici ne couvre
+          // que ce seul jour.
+          (cause === 'conge' || cause === 'mise_a_pied') && (
+            <p className="text-xs text-slate-400 dark:text-slate-500">
+              Normalement suivi depuis le module {cause === 'conge' ? 'Congés' : 'Sanctions'} (synchronisé automatiquement avec le
+              pointage) — ce choix ici ne couvre que cette seule journée.
+            </p>
+          )
+        )}
         {cause === 'stc' && (
           <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
             La date sélectionnée sera enregistrée comme date de sortie. L'employé sera automatiquement marqué "Sorti" et
@@ -431,6 +552,82 @@ function AbsenceModal({
           </Button>
           <Button type="submit" variant="danger" disabled={mutation.isPending}>
             {isCorrection ? 'Enregistrer' : "Confirmer l'absence"}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+/**
+ * Edits an already-declared Maladie PERIOD (start_date..end_date, inclusive)
+ * — creating a new one happens inline from the "Marquer absent" modal (cause
+ * = Maladie) instead of here; this modal is only reached via the pencil icon
+ * on the "Périodes de maladie déclarées" list below the daily sheet.
+ */
+function IllnessFormModal({ illness, onClose }: { illness: Illness; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [employee, setEmployee] = useState<Employee | null>(illness.employee ?? null);
+  const [form, setForm] = useState({
+    start_date: illness.start_date.slice(0, 10),
+    end_date: illness.end_date.slice(0, 10),
+    description: illness.description ?? '',
+  });
+
+  const mutation = useMutation({
+    mutationFn: () => api.put(`/illnesses/${illness.id}`, { ...form, employee_id: employee?.id }),
+    onSuccess: () => {
+      toast.success('Période de maladie mise à jour.');
+      queryClient.invalidateQueries({ queryKey: ['illnesses'] });
+      queryClient.invalidateQueries({ queryKey: ['attendance-daily'] });
+      onClose();
+    },
+    onError: (err) => toast.error(apiErrorMessage(err)),
+  });
+
+  return (
+    <Modal open onClose={onClose} title="Modifier la période de maladie" size="sm">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          mutation.mutate();
+        }}
+        className="space-y-4"
+      >
+        <EmployeeSelect value={employee?.id ?? null} onChange={setEmployee} />
+        <div className="grid grid-cols-2 gap-3">
+          <TextField
+            label="Date de début"
+            type="date"
+            required
+            value={form.start_date}
+            onChange={(e) => setForm({ ...form, start_date: e.target.value })}
+          />
+          <TextField
+            label="Date de fin"
+            type="date"
+            required
+            min={form.start_date}
+            value={form.end_date}
+            onChange={(e) => setForm({ ...form, end_date: e.target.value })}
+          />
+        </div>
+        <p className="text-xs text-slate-400 dark:text-slate-500">
+          L'employé sera automatiquement marqué "Absent - Maladie" pour chaque jour de cette période (bornes incluses), sans
+          pointage manuel. Il redevient disponible normalement dès le lendemain de la date de fin.
+        </p>
+        <TextAreaField
+          label="Description (optionnel)"
+          placeholder="Ex : Arrêt maladie avec certificat médical."
+          value={form.description}
+          onChange={(e) => setForm({ ...form, description: e.target.value })}
+        />
+        <div className="flex justify-end gap-2 pt-2">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Annuler
+          </Button>
+          <Button type="submit" disabled={!employee || mutation.isPending}>
+            Enregistrer
           </Button>
         </div>
       </form>

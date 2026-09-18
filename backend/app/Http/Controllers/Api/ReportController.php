@@ -7,14 +7,18 @@ use App\Http\Controllers\Controller;
 use App\Models\Attendance;
 use App\Models\CashTransaction;
 use App\Models\DisciplinaryWarning;
+use App\Models\Employee;
 use App\Models\Entry;
 use App\Models\EmployeeExit;
 use App\Models\LeaveRequest;
 use App\Models\Site;
 use App\Models\Suspension;
+use App\Services\AttendanceAutomation;
 use App\Services\ExcelExportService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -87,20 +91,96 @@ class ReportController extends Controller
         return $query->orderByDesc('date');
     }
 
+    /**
+     * Merges real Attendance rows with the auto-derived Maladie/Congé/Mise à
+     * pied days that never get a real row (see AttendanceAutomation) —
+     * without this, a report/export would silently be missing every day
+     * covered only by an active period. Real rows always win over a virtual
+     * one for the same employee/date. Returns plain associative rows so both
+     * shapes (Eloquent model vs. synthetic array) are handled uniformly by
+     * the caller.
+     */
+    protected function attendanceRows(Request $request): Collection
+    {
+        $real = $this->attendanceQuery($request)->get();
+        $existingKeys = $real->map(fn (Attendance $a) => $a->employee_id.'|'.$a->date->toDateString())->all();
+
+        $employeesQuery = Employee::query()->with('site');
+        $this->scopeToSite($employeesQuery, $request);
+        if ($employeeId = $request->query('employee_id')) {
+            $employeesQuery->where('id', $employeeId);
+        }
+        $employeesById = $employeesQuery->get()->keyBy('id');
+
+        $virtual = collect(AttendanceAutomation::virtualRows(
+            $employeesById,
+            $request->query('date_from'),
+            $request->query('date_to'),
+            $existingKeys,
+        ));
+
+        if ($status = $request->query('status')) {
+            $virtual = $virtual->where('status', $status);
+        }
+        if ($cause = $request->query('absence_cause')) {
+            $virtual = $virtual->where('absence_cause', $cause);
+        }
+        if ($search = $request->query('search')) {
+            $virtual = $virtual->filter(fn ($r) => str_contains(mb_strtolower($r['employee_name'] ?? ''), mb_strtolower($search)));
+        }
+
+        // Shaped exactly like a real Attendance row (nested employee/site,
+        // `id: null`) so the frontend's Rapports table can render both kinds
+        // through the same columns — `auto: true` is the only tell.
+        $realRows = $real->map(fn (Attendance $a) => [
+            'id' => $a->id,
+            'date' => $a->date->toDateString(),
+            'employee' => ['id' => $a->employee_id, 'full_name' => $a->employee?->full_name],
+            'site' => ['id' => $a->site_id, 'name' => $a->site?->name],
+            'status' => $a->status,
+            'absence_cause' => $a->absence_cause,
+            'description' => $a->description,
+            'auto' => false,
+        ]);
+
+        $virtualRows = $virtual->map(fn (array $r) => [
+            'id' => null,
+            'date' => $r['date'],
+            'employee' => ['id' => $r['employee_id'], 'full_name' => $r['employee_name']],
+            'site' => ['id' => $r['site_id'], 'name' => $r['site_name']],
+            'status' => $r['status'],
+            'absence_cause' => $r['absence_cause'],
+            'description' => $r['description'],
+            'auto' => true,
+        ]);
+
+        return $realRows->concat($virtualRows)->sortByDesc('date')->values();
+    }
+
     public function attendance(Request $request)
     {
-        return $this->attendanceQuery($request)->paginate($request->integer('per_page', 30));
+        $rows = $this->attendanceRows($request);
+        $page = $request->integer('page', 1);
+        $perPage = $request->integer('per_page', 30);
+
+        return new LengthAwarePaginator(
+            $rows->forPage($page, $perPage)->values(),
+            $rows->count(),
+            $perPage,
+            $page,
+            ['path' => $request->url(), 'query' => $request->query()],
+        );
     }
 
     public function exportAttendance(Request $request): StreamedResponse
     {
-        $rows = $this->attendanceQuery($request)->get()->map(fn (Attendance $a) => [
-            $a->date->format('d/m/Y'),
-            $a->employee?->full_name,
-            $a->site?->name,
-            $a->status,
-            $a->absence_cause,
-            $a->description,
+        $rows = $this->attendanceRows($request)->map(fn (array $r) => [
+            (new \DateTime($r['date']))->format('d/m/Y'),
+            $r['employee']['full_name'],
+            $r['site']['name'],
+            $r['status'],
+            $r['absence_cause'],
+            $r['description'],
         ]);
 
         return $this->excel->stream(

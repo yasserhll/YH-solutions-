@@ -11,6 +11,7 @@ use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\EmployeeExit;
 use App\Models\Holiday;
+use App\Services\AttendanceAutomation;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -91,18 +92,44 @@ class AttendanceController extends Controller
             ->get()
             ->keyBy('employee_id');
 
-        $rows = $employees->map(function (Employee $employee) use ($attendances, $date, $defaultStatus) {
+        // Maladie/Congé/Mise à pied come from their own module's date range
+        // (Illness/Leave/Suspension) and are used only as the day's DEFAULT
+        // when nothing was keyed in — exactly like the Sunday/holiday default
+        // below. A real Attendance row always wins over it, so the
+        // responsable keeps full manual control at all times (mark present,
+        // correct the cause, whatever): the automatic cause just saves having
+        // to key in the obvious case every day, it never locks the row.
+        $autoCauses = AttendanceAutomation::causesForDate($employees->pluck('id')->all(), $date);
+
+        $rows = $employees->map(function (Employee $employee) use ($attendances, $date, $defaultStatus, $autoCauses) {
             $attendance = $attendances->get($employee->id);
+
+            if ($attendance) {
+                return [
+                    'employee_id' => $employee->id,
+                    'full_name' => $employee->full_name,
+                    'site' => $employee->site->name,
+                    'date' => $date,
+                    'attendance_id' => $attendance->id,
+                    'status' => $attendance->status,
+                    'absence_cause' => $attendance->absence_cause,
+                    'description' => $attendance->description,
+                    'auto' => false,
+                ];
+            }
+
+            $autoCause = $autoCauses[$employee->id] ?? null;
 
             return [
                 'employee_id' => $employee->id,
                 'full_name' => $employee->full_name,
                 'site' => $employee->site->name,
                 'date' => $date,
-                'attendance_id' => $attendance?->id,
-                'status' => $attendance?->status ?? $defaultStatus,
-                'absence_cause' => $attendance?->absence_cause,
-                'description' => $attendance?->description,
+                'attendance_id' => null,
+                'status' => $autoCause ? 'absent' : $defaultStatus,
+                'absence_cause' => $autoCause,
+                'description' => null,
+                'auto' => (bool) $autoCause,
             ];
         });
 

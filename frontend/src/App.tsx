@@ -15,6 +15,7 @@ import LeavesPage from './pages/LeavesPage';
 import SanctionsPage from './pages/SanctionsPage';
 import MovementsPage from './pages/MovementsPage';
 import AssignmentsPage from './pages/AssignmentsPage';
+import OvertimePage from './pages/OvertimePage';
 import CashPage from './pages/CashPage';
 import UsersPage from './pages/UsersPage';
 import ReportsPage from './pages/ReportsPage';
@@ -148,6 +149,14 @@ export default function App() {
                       <RequireNotHseAnimateur>
                         <AssignmentsPage />
                       </RequireNotHseAnimateur>
+                    }
+                  />
+                  <Route
+                    path="/heures-supplementaires"
+                    element={
+                      <RequireFullAccess>
+                        <OvertimePage />
+                      </RequireFullAccess>
                     }
                   />
                   <Route

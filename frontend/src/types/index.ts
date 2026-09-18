@@ -73,15 +73,18 @@ export type AttendanceStatus = 'present' | 'absent';
 export type AbsenceCause = 'maladie' | 'autorisee' | 'non_autorisee' | 'conge' | 'mise_a_pied' | 'stc';
 
 export interface Attendance {
-  id: number;
-  employee_id: number;
-  site_id: number;
+  /** null on a Rapports row synthesized from an active Maladie/Congé/Mise à pied period (see `auto`) — nothing to edit/delete for it. */
+  id: number | null;
+  employee_id?: number;
+  site_id?: number;
   date: string;
   status: AttendanceStatus;
   absence_cause: AbsenceCause | null;
   description: string | null;
   employee?: Employee;
   site?: Site;
+  /** True when this row wasn't keyed in but derived from an active Illness/Leave/Suspension period. */
+  auto?: boolean;
 }
 
 export interface DailyAttendanceRow {
@@ -93,6 +96,20 @@ export interface DailyAttendanceRow {
   status: AttendanceStatus;
   absence_cause: AbsenceCause | null;
   description: string | null;
+  /** True when Maladie/Congé/Mise à pied is auto-applied from an active period — no manual action possible on this row. */
+  auto: boolean;
+}
+
+/** A declared Maladie period — Pointage derives "Absent - Maladie" from this for every day in [start_date, end_date], see AttendanceAutomation backend-side. */
+export interface Illness {
+  id: number;
+  employee_id: number;
+  site_id: number;
+  start_date: string;
+  end_date: string;
+  description: string | null;
+  employee?: Employee;
+  site?: Site;
 }
 
 export type DayType = 'normal' | 'sunday' | 'holiday';
@@ -247,6 +264,42 @@ export interface HseDashboardData {
   trend: HseDashboardTrendPoint[];
   by_site: HseDashboardSiteComparison[];
   recent_reports: HseReport[];
+}
+
+/** A single "heures supplémentaires" declaration — the raw input. See OvertimeMonth for the derived per-month ledger. */
+export interface OvertimeEntry {
+  id: number;
+  employee_id: number;
+  site_id: number;
+  date: string;
+  hours: string;
+  remark: string | null;
+  created_by: number | null;
+  employee?: Employee;
+  site?: Site;
+  creator?: { id: number; name: string } | null;
+}
+
+/**
+ * One row per employee per calendar month — derived from OvertimeEntry by
+ * the backend (8h = 1 payable day, the remainder always carries to the next
+ * month). Read-only: `is_paid` is computed server-side from `month` vs.
+ * today (paid automatically once the calendar moves past that month) —
+ * there is no action to toggle it.
+ */
+export interface OvertimeMonth {
+  id: number;
+  employee_id: number;
+  site_id: number;
+  month: string;
+  carried_hours: string;
+  declared_hours: string;
+  total_hours: string;
+  days_earned: number;
+  remaining_hours: string;
+  is_paid: boolean;
+  employee?: Employee;
+  site?: Site;
 }
 
 export interface Assignment {

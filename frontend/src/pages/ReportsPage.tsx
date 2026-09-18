@@ -75,7 +75,16 @@ export default function ReportsPage() {
     { header: 'Employé', accessor: (a) => a.employee?.full_name },
     { header: 'Site', accessor: (a) => a.site?.name },
     { header: 'Statut', accessor: (a) => <StatusBadge status={a.status} /> },
-    { header: 'Cause', accessor: (a) => (a.absence_cause ? <StatusBadge status={a.absence_cause} /> : '—') },
+    {
+      header: 'Cause',
+      accessor: (a) => (
+        <span className="inline-flex items-center gap-1.5">
+          {a.absence_cause ? <StatusBadge status={a.absence_cause} /> : '—'}
+          {/* Derived from an active Maladie/Congé/Mise à pied period, not a keyed-in pointage row. */}
+          {a.auto && <span className="text-xs text-slate-400 dark:text-slate-500">(auto)</span>}
+        </span>
+      ),
+    },
   ];
 
   const leaveColumns: Column<LeaveRequest>[] = [
@@ -163,7 +172,7 @@ export default function ReportsPage() {
             columns={attendanceColumns}
             rows={attendanceQuery.data?.data ?? []}
             isLoading={attendanceQuery.isLoading}
-            keyFn={(a) => a.id}
+            keyFn={(a) => a.id ?? `auto-${a.employee?.id}-${a.date}`}
           />
         )}
         {tab === 'Congés' && (
