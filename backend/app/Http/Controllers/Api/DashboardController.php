@@ -64,7 +64,7 @@ class DashboardController extends Controller
                 'total' => (clone $activeEmployees)->count(),
                 'present_today' => (clone $attendanceToday)->where('status', 'present')->count(),
                 'absent_today' => (clone $attendanceToday)->where('status', 'absent')->count() + count($autoCausesToday),
-                'leaves_in_progress' => (clone $leaves)->where('status', 'en_cours')->count(),
+                'leaves_in_progress' => (clone $leaves)->inProgress()->count(),
                 'new_employees_30d' => (clone $employees)->where('entry_date', '>=', now()->subDays(30))->count(),
                 'recent_exits_30d' => (clone $exits)->where('exit_date', '>=', now()->subDays(30))->count(),
             ],
@@ -80,8 +80,8 @@ class DashboardController extends Controller
             'leaves' => [
                 'pending' => (clone $leaveRequests)->where('status', 'en_attente')->count(),
                 'accepted' => (clone $leaveRequests)->where('status', 'acceptee')->count(),
-                'in_progress' => (clone $leaves)->where('status', 'en_cours')->count(),
-                'completed' => (clone $leaves)->where('status', 'termine')->count(),
+                'in_progress' => (clone $leaves)->inProgress()->count(),
+                'completed' => (clone $leaves)->finished()->count(),
             ],
             'sanctions' => [
                 'warnings' => (clone $warnings)->count(),

@@ -24,6 +24,7 @@ export default function LeavesPage() {
   const [tab, setTab] = useUrlTab(tabs, 'Demandes');
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [monthFilter, setMonthFilter] = useState('');
   const [showRequestForm, setShowRequestForm] = useState(false);
   const [showLeaveForm, setShowLeaveForm] = useState(false);
   const [editingRequest, setEditingRequest] = useState<LeaveRequest | null>(null);
@@ -42,8 +43,11 @@ export default function LeavesPage() {
   });
 
   const leavesQuery = useQuery({
-    queryKey: ['leaves', siteParams, page, search],
-    queryFn: () => api.get<Paginated<Leave>>('/leaves', { params: { ...siteParams, page, search: search || undefined } }).then((r) => r.data),
+    queryKey: ['leaves', siteParams, page, search, monthFilter],
+    queryFn: () =>
+      api
+        .get<Paginated<Leave>>('/leaves', { params: { ...siteParams, page, search: search || undefined, month: monthFilter || undefined } })
+        .then((r) => r.data),
     enabled: tab === 'Congés en cours',
   });
 
@@ -90,12 +94,20 @@ export default function LeavesPage() {
           <select
             value={r.status}
             onChange={(e) => statusMutation.mutate({ id: r.id, status: e.target.value as LeaveRequestStatus })}
-            className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+            className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-1 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
           >
-            <option value="en_attente">En attente</option>
-            <option value="acceptee">Acceptée</option>
-            <option value="refusee">Refusée</option>
-            <option value="annulee">Annulée</option>
+            <option value="en_attente" className="bg-white text-amber-700">
+              En attente
+            </option>
+            <option value="acceptee" className="bg-white text-emerald-700">
+              Acceptée
+            </option>
+            <option value="refusee" className="bg-white text-red-700">
+              Refusée
+            </option>
+            <option value="annulee" className="bg-white text-slate-700">
+              Annulée
+            </option>
           </select>
         ) : (
           <StatusBadge status={r.status} />
@@ -176,8 +188,30 @@ export default function LeavesPage() {
         ))}
       </div>
 
-      <div className="mb-4 w-full sm:w-64">
-        <SearchInput placeholder="Rechercher par nom..." value={search} onChange={(e) => (setSearch(e.target.value), setPage(1))} />
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="w-full sm:w-64">
+          <SearchInput placeholder="Rechercher par nom..." value={search} onChange={(e) => (setSearch(e.target.value), setPage(1))} />
+        </div>
+        {tab === 'Congés en cours' && (
+          <>
+            <input
+              type="month"
+              value={monthFilter}
+              onChange={(e) => (setMonthFilter(e.target.value), setPage(1))}
+              title="Filtrer par mois de début du congé"
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+            />
+            {monthFilter && (
+              <button
+                type="button"
+                onClick={() => (setMonthFilter(''), setPage(1))}
+                className="text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+              >
+                Tous les mois
+              </button>
+            )}
+          </>
+        )}
       </div>
 
       {tab === 'Demandes' ? (

@@ -21,7 +21,7 @@ class LeaveController extends Controller
         $this->scopeToSite($query, $request);
 
         if ($status = $request->query('status')) {
-            $query->where('status', $status);
+            $status === 'termine' ? $query->finished() : $query->inProgress();
         }
         if ($employeeId = $request->query('employee_id')) {
             $query->where('employee_id', $employeeId);
@@ -29,8 +29,21 @@ class LeaveController extends Controller
         if ($search = $request->query('search')) {
             $query->whereHas('employee', fn ($q) => $q->where('full_name', 'like', "%{$search}%"));
         }
+        if ($month = $request->query('month')) {
+            $period = Carbon::parse($month.'-01');
+            $query->whereYear('start_date', $period->year)->whereMonth('start_date', $period->month);
+        }
 
-        return $query->orderByDesc('start_date')->paginate($request->integer('per_page', 15));
+        // En cours first (soonest to end first among them), then Terminé,
+        // most recently finished first — never buried under a long list of
+        // already-finished leaves.
+        $today = Carbon::today()->toDateString();
+
+        return $query
+            ->orderByRaw('CASE WHEN end_date < ? THEN 1 ELSE 0 END', [$today])
+            ->orderByRaw('CASE WHEN end_date < ? THEN end_date END DESC', [$today])
+            ->orderByRaw('CASE WHEN end_date >= ? THEN end_date END ASC', [$today])
+            ->paginate($request->integer('per_page', 15));
     }
 
     public function store(StoreLeaveTakenRequest $request)
@@ -41,7 +54,6 @@ class LeaveController extends Controller
         $data = $request->validated();
         $data['site_id'] = $employee->site_id;
         $data['created_by'] = $request->user()->id;
-        $data['status'] = 'en_cours';
         $data['end_date'] = Leave::endDateForDuration(Carbon::parse($data['start_date']), $data['duration_days']);
 
         $leave = Leave::create($data);
@@ -88,15 +100,6 @@ class LeaveController extends Controller
         $leave->update($data);
 
         return $leave->load(['employee', 'site', 'extensions']);
-    }
-
-    public function updateStatus(Request $request, Leave $leave)
-    {
-        $this->ensureSiteAccess($request, $leave->site_id);
-        $data = $request->validate(['status' => ['required', 'in:en_cours,termine']]);
-        $leave->update($data);
-
-        return $leave;
     }
 
     public function destroy(Request $request, Leave $leave)

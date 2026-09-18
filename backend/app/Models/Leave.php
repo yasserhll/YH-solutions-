@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -30,6 +31,35 @@ class Leave extends Model
             'start_date' => 'date',
             'end_date' => 'date',
         ];
+    }
+
+    /**
+     * Computed, never trusted from the stored column — a leave becomes
+     * "termine" the instant its end_date has fully passed, with no manual
+     * action needed (same "computed, never stored" reasoning as
+     * OvertimeMonth::isPaid()). The raw `status` DB column is legacy and
+     * ignored here on purpose.
+     */
+    protected function status(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => $this->isFinished() ? 'termine' : 'en_cours',
+        );
+    }
+
+    public function isFinished(): bool
+    {
+        return $this->end_date !== null && $this->end_date->lt(Carbon::today());
+    }
+
+    public function scopeInProgress($query)
+    {
+        return $query->whereDate('end_date', '>=', Carbon::today());
+    }
+
+    public function scopeFinished($query)
+    {
+        return $query->whereDate('end_date', '<', Carbon::today());
     }
 
     public function employee(): BelongsTo
