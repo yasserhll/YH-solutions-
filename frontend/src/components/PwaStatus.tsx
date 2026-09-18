@@ -47,6 +47,17 @@ export function PwaStatus() {
         // needing to close the tab first.
         if (!registration) return;
         setInterval(() => registration.update(), 30 * 60 * 1000);
+
+        // The 30-minute poll alone is too slow for how this app is actually
+        // used on a tablet or as an installed PWA: it's backgrounded and
+        // foregrounded constantly rather than closed, so a deploy made while
+        // it sat in the background could otherwise go unnoticed for up to
+        // half an hour. Checking again the moment it comes back to the
+        // foreground (switching back to the tab, reopening the installed
+        // app, unlocking the tablet) catches that case immediately instead.
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') registration.update();
+        });
       },
     });
     updateSWRef.current = updateSW;
