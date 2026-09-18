@@ -25,8 +25,19 @@ function hoursLabel(h: string | number) {
   return `${Number.isInteger(n) ? n : n.toFixed(2)} h`;
 }
 
-function monthLabel(month: string) {
-  return new Date(month).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+// `month` is the PAYROLL period's end date (always the 26th) — the period
+// itself runs from the 27th of the previous month to that date (see
+// OvertimePayPeriod backend-side), never the calendar month. Label the full
+// range rather than just "septembre 2026" so that 27-26 rule stays visible
+// everywhere this shows up, not just in a code comment.
+function periodLabel(month: string) {
+  const end = new Date(month);
+  const start = new Date(end);
+  start.setMonth(start.getMonth() - 1);
+  start.setDate(27);
+  const startLabel = start.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+  const endLabel = end.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+  return `${startLabel} – ${endLabel}`;
 }
 
 export default function OvertimePage() {
@@ -102,7 +113,7 @@ export default function OvertimePage() {
   ];
 
   const monthColumns: Column<OvertimeMonth>[] = [
-    { header: 'Mois', accessor: (m) => <span className="capitalize">{monthLabel(m.month)}</span> },
+    { header: 'Période', accessor: (m) => periodLabel(m.month) },
     { header: 'Employé', accessor: (m) => m.employee?.full_name },
     { header: 'Site', accessor: (m) => m.site?.name },
     { header: 'Reportées', accessor: (m) => hoursLabel(m.carried_hours) },
@@ -119,7 +130,7 @@ export default function OvertimePage() {
     <div>
       <PageHeader
         title="Heures supplémentaires"
-        description="8 heures supplémentaires = 1 journée à payer — le reliquat est reporté automatiquement au mois suivant"
+        description="8 heures supplémentaires = 1 journée à payer — le mois de paie va du 27 au 26 (pas le mois civil), et le reliquat est reporté automatiquement à la période suivante"
         actions={
           tab === 'Déclarations' && (
             <Button onClick={() => setShowForm(true)}>
@@ -150,11 +161,14 @@ export default function OvertimePage() {
         <div className="w-full sm:w-64">
           <SearchInput placeholder="Rechercher par nom..." value={search} onChange={(e) => (setSearch(e.target.value), setPage(1))} />
         </div>
-        {/* Browse a specific past month's history/résumé — empty = tous les mois. */}
+        {/* Browse a specific past period's history/résumé — empty = toutes les
+            périodes. The month picked refers to the period CLOSING in it
+            (e.g. "septembre" = la période du 27/08 au 26/09). */}
         <input
           type="month"
           value={monthFilter}
           onChange={(e) => (setMonthFilter(e.target.value), setPage(1))}
+          title="Le mois choisi correspond à la période de paie qui se termine le 26 de ce mois (27 du mois précédent → 26 de ce mois)."
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
         />
         {monthFilter && (

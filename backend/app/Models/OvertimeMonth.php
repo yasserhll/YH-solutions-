@@ -2,12 +2,18 @@
 
 namespace App\Models;
 
+use App\Services\OvertimePayPeriod;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 
+/**
+ * One row per employee per PAYROLL period (27 -> 26, see OvertimePayPeriod)
+ * — `month` stores the period's END date (always the 26th of some month),
+ * not the 1st of a calendar month.
+ */
 class OvertimeMonth extends Model
 {
     use HasFactory;
@@ -47,13 +53,14 @@ class OvertimeMonth extends Model
     }
 
     /**
-     * A month's earned days are paid automatically the moment the calendar
-     * moves past that month — no manual action, nothing stored: always
-     * computed fresh from `month` vs. today, so it can never go stale.
-     * The current month is always "à payer" (still accumulating).
+     * A period's earned days are paid automatically the moment the payroll
+     * calendar moves past that period (i.e. once we're into a later 27-26
+     * window) — no manual action, nothing stored: always computed fresh from
+     * `month` (the period's end date) vs. today, so it can never go stale.
+     * The current, still-open period is always "à payer".
      */
     protected function isPaid(): Attribute
     {
-        return Attribute::make(get: fn () => $this->month->lt(Carbon::now()->startOfMonth()));
+        return Attribute::make(get: fn () => $this->month->lt(OvertimePayPeriod::endForDate(Carbon::now())));
     }
 }

@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Employee;
 use App\Models\OvertimeEntry;
 use App\Services\OvertimeLedgerService;
+use App\Services\OvertimePayPeriod;
 use Illuminate\Http\Request;
 
 /**
@@ -30,8 +31,13 @@ class OvertimeEntryController extends Controller
         if ($employeeId = $request->query('employee_id')) {
             $query->where('employee_id', $employeeId);
         }
+        // ?month=YYYY-MM refers to the payroll PERIOD closing in that
+        // calendar month (27 -> 26, see OvertimePayPeriod) — not the raw
+        // calendar month a declaration's date falls in, so this stays
+        // consistent with how /overtime-months buckets the same entries.
         if ($month = $request->query('month')) {
-            $query->whereRaw("DATE_FORMAT(date, '%Y-%m') = ?", [$month]);
+            [$start, $end] = OvertimePayPeriod::boundsForYearMonth($month);
+            $query->whereBetween('date', [$start->toDateString(), $end->toDateString()]);
         }
         if ($search = $request->query('search')) {
             $query->whereHas('employee', fn ($q) => $q->where('full_name', 'like', "%{$search}%"));
