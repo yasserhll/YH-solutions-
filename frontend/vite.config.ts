@@ -8,12 +8,16 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      // A stale service worker is worse than a mid-session reload here: this
-      // app is edited constantly, and 'prompt' left a fix sitting inert on
-      // an already-installed device until someone happened to notice and
-      // click an update toast. 'autoUpdate' activates a new worker and
-      // reloads automatically as soon as one is available.
-      registerType: 'autoUpdate',
+      // 'prompt' is required for the RECHARGER banner (PwaStatus.tsx) to
+      // work at all: vite-plugin-pwa's register script only invokes
+      // onNeedRefresh — the callback the banner is driven by — when
+      // registerType is 'prompt'. Under 'autoUpdate' the plugin applies the
+      // update and reloads on its own without ever calling onNeedRefresh, so
+      // the banner would never appear no matter what PwaStatus.tsx does.
+      // This was switched from 'autoUpdate' back to 'prompt' together with
+      // the PwaStatus.tsx change (see its docblock) — the two must move
+      // together, not just one.
+      registerType: 'prompt',
       injectRegister: null,
       includeAssets: ['favicon.jpg', 'icons/apple-touch-icon.png'],
       devOptions: {
