@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\InteractsWithSites;
+use App\Http\Controllers\Concerns\RevertsEmployeeDeparture;
 use App\Http\Controllers\Controller;
 use App\Models\Assignment;
 use App\Models\Employee;
@@ -12,7 +13,7 @@ use Illuminate\Support\Facades\DB;
 
 class ExitController extends Controller
 {
-    use InteractsWithSites;
+    use InteractsWithSites, RevertsEmployeeDeparture;
 
     public function index(Request $request)
     {
@@ -117,12 +118,7 @@ class ExitController extends Controller
         $this->ensureSiteAccess($request, $exit->site_id);
 
         return DB::transaction(function () use ($exit) {
-            if ($exit->employee_id && $exit->employee?->status === 'sorti') {
-                $this->reopenCurrentAssignment($exit->employee, $exit->exit_date);
-                $exit->employee->update(['status' => 'actif', 'exit_date' => null]);
-            }
-
-            $exit->delete();
+            $this->revertEmployeeDeparture($exit);
 
             return response()->json(['message' => 'Sortie supprimée.']);
         });
@@ -140,20 +136,5 @@ class ExitController extends Controller
         Assignment::where('employee_id', $employee->id)
             ->where('is_current', true)
             ->update(['is_current' => false, 'end_date' => $exitDate]);
-    }
-
-    /**
-     * Undoes closeCurrentAssignment() when an exit record is deleted by
-     * mistake — reopens the assignment that was closed on that exact exit
-     * date, mirroring the employee status revert just above.
-     */
-    protected function reopenCurrentAssignment(Employee $employee, $exitDate): void
-    {
-        Assignment::where('employee_id', $employee->id)
-            ->where('is_current', false)
-            ->whereDate('end_date', $exitDate)
-            ->orderByDesc('start_date')
-            ->first()
-            ?->update(['is_current' => true, 'end_date' => null]);
     }
 }

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { UserX, Pencil, Download, CalendarOff, Trash2 } from 'lucide-react';
+import { UserX, Pencil, Download, CalendarOff, Trash2, X } from 'lucide-react';
 import { api, apiErrorMessage, downloadFile } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
 import type { AbsenceCause, DailyAttendanceRow, DailyAttendanceSheet } from '../types';
@@ -33,6 +33,7 @@ export default function AttendancePage() {
   const [absenceTarget, setAbsenceTarget] = useState<DailyAttendanceRow | DailyAttendanceRow[] | null>(null);
   const [showHolidayForm, setShowHolidayForm] = useState(false);
   const [confirmRemoveHoliday, setConfirmRemoveHoliday] = useState(false);
+  const [cancelStcTarget, setCancelStcTarget] = useState<DailyAttendanceRow | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['attendance-daily', siteParams, date, search, statusFilter],
@@ -80,6 +81,36 @@ export default function AttendancePage() {
   const rows = data?.rows ?? [];
   const allSelected = rows.length > 0 && selected.length === rows.length;
   const dayType = data?.day_type ?? 'normal';
+  // Cancelling removes the record rather than flipping it, so the row falls
+  // back to whatever this day's default is (see AttendanceController::daily).
+  const defaultStatusLabel = dayType === 'normal' ? 'présent' : 'absent';
+
+  const cancelAttendance = useMutation({
+    mutationFn: (row: DailyAttendanceRow) => api.delete(`/attendance/${row.attendance_id}`),
+    onSuccess: (_res, row) => {
+      queryClient.invalidateQueries({ queryKey: ['attendance-daily'] });
+      // Cancelling an STC also brings the employee back from "sorti" and
+      // deletes the Sortie it generated — both lists are stale now.
+      if (row.absence_cause === 'stc') {
+        queryClient.invalidateQueries({ queryKey: ['employees'] });
+        queryClient.invalidateQueries({ queryKey: ['exits'] });
+      }
+      toast.success(`Pointage annulé — ${row.full_name} est de nouveau ${defaultStatusLabel} par défaut.`);
+      setCancelStcTarget(null);
+    },
+    onError: (err) => toast.error(apiErrorMessage(err)),
+  });
+
+  // A plain absent/present correction is itself reversible in one click, so
+  // it doesn't need a confirmation; an STC does, because cancelling it also
+  // reverses the employee's departure.
+  function requestCancel(row: DailyAttendanceRow) {
+    if (row.absence_cause === 'stc') {
+      setCancelStcTarget(row);
+      return;
+    }
+    cancelAttendance.mutate(row);
+  }
 
   return (
     <div>
@@ -188,28 +219,43 @@ export default function AttendancePage() {
                   <td className="px-4 py-2.5">{row.absence_cause ? causeLabels[row.absence_cause] : '—'}</td>
                   <td className="px-4 py-2.5 text-slate-500 dark:text-slate-400">{row.description ?? '—'}</td>
                   <td className="px-4 py-2.5">
-                    {row.status === 'present' ? (
-                      <Button size="sm" variant="secondary" onClick={() => setAbsenceTarget(row)}>
-                        <UserX size={14} /> Marquer absent
-                      </Button>
-                    ) : (
-                      <div className="flex items-center gap-1">
-                        <Button size="sm" variant="secondary" onClick={() => markPresent.mutate(row.employee_id)}>
-                          Marquer présent
+                    <div className="flex items-center gap-1">
+                      {row.status === 'present' ? (
+                        <Button size="sm" variant="secondary" onClick={() => setAbsenceTarget(row)}>
+                          <UserX size={14} /> Marquer absent
                         </Button>
-                        {/* Correcting the cause (e.g. "non autorisée" → "maladie"
-                            once a medical justification arrives) shouldn't
-                            require marking present then absent again. */}
+                      ) : (
+                        <>
+                          <Button size="sm" variant="secondary" onClick={() => markPresent.mutate(row.employee_id)}>
+                            Marquer présent
+                          </Button>
+                          {/* Correcting the cause (e.g. "non autorisée" → "maladie"
+                              once a medical justification arrives) shouldn't
+                              require marking present then absent again. */}
+                          <button
+                            onClick={() => setAbsenceTarget(row)}
+                            className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                            aria-label="Modifier la cause de l'absence"
+                            title="Modifier la cause de l'absence"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                        </>
+                      )}
+                      {/* Only rows actually keyed in have something to cancel —
+                          a row still on the day's default has no record yet. */}
+                      {row.attendance_id !== null && (
                         <button
-                          onClick={() => setAbsenceTarget(row)}
-                          className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-                          aria-label="Modifier la cause de l'absence"
-                          title="Modifier la cause de l'absence"
+                          onClick={() => requestCancel(row)}
+                          disabled={cancelAttendance.isPending}
+                          className="rounded-md p-1.5 text-red-500 hover:bg-red-50 disabled:opacity-50 dark:hover:bg-red-500/10"
+                          aria-label="Annuler ce pointage"
+                          title={`Annuler ce pointage — ${row.full_name} redeviendra ${defaultStatusLabel} par défaut`}
                         >
-                          <Pencil size={14} />
+                          <X size={14} />
                         </button>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -232,6 +278,16 @@ export default function AttendancePage() {
       )}
 
       {showHolidayForm && <HolidayFormModal date={date} onClose={() => setShowHolidayForm(false)} />}
+
+      <ConfirmDialog
+        open={!!cancelStcTarget}
+        title="Annuler ce pointage STC"
+        message={`${cancelStcTarget?.full_name} redeviendra ${defaultStatusLabel} par défaut et repassera en "actif" : la sortie générée par ce STC sera supprimée et son affectation réouverte.`}
+        confirmLabel="Confirmer l'annulation"
+        onCancel={() => setCancelStcTarget(null)}
+        onConfirm={() => cancelStcTarget && cancelAttendance.mutate(cancelStcTarget)}
+        isLoading={cancelAttendance.isPending}
+      />
 
       <ConfirmDialog
         open={confirmRemoveHoliday}

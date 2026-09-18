@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\InteractsWithSites;
+use App\Http\Controllers\Concerns\RevertsEmployeeDeparture;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreAttendanceRequest;
 use App\Models\Assignment;
@@ -17,7 +18,7 @@ use Illuminate\Validation\Rule;
 
 class AttendanceController extends Controller
 {
-    use InteractsWithSites;
+    use InteractsWithSites, RevertsEmployeeDeparture;
 
     public function index(Request $request)
     {
@@ -256,11 +257,42 @@ class AttendanceController extends Controller
         return $attendance->load(['employee', 'site']);
     }
 
+    /**
+     * Cancels a pointage keyed in by mistake (wrong person marked absent, or
+     * marked present). The record is REMOVED rather than flipped, so the row
+     * falls back to the day's default status — présent on a normal day,
+     * absent on a Sunday/holiday (see daily() above) — which is the real
+     * "undo": before the mistake, no record existed either.
+     *
+     * Cancelling an "STC" absence must also undo the departure that absence
+     * triggered (see recordStcExit): employee back to "actif", the generated
+     * Sortie removed, the assignment reopened. Without that, cancelling the
+     * pointage would leave the person permanently flagged as gone — the
+     * worst mistake to be unable to take back.
+     */
     public function destroy(Request $request, Attendance $attendance)
     {
         $this->ensureSiteAccess($request, $attendance->site_id);
-        $attendance->delete();
 
-        return response()->json(['message' => 'Pointage supprimé.']);
+        DB::transaction(function () use ($attendance) {
+            if ($attendance->status === 'absent' && $attendance->absence_cause === 'stc') {
+                // Matched on reason too: if a manual Sortie happens to exist
+                // for the same employee/date, cancelling a pointage must not
+                // delete someone's hand-entered record.
+                $exit = EmployeeExit::where('employee_id', $attendance->employee_id)
+                    ->whereDate('exit_date', $attendance->date)
+                    ->where('reason', 'STC')
+                    ->latest('id')
+                    ->first();
+
+                if ($exit) {
+                    $this->revertEmployeeDeparture($exit);
+                }
+            }
+
+            $attendance->delete();
+        });
+
+        return response()->json(['message' => 'Pointage annulé.']);
     }
 }
