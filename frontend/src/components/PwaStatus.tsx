@@ -78,7 +78,21 @@ export function PwaStatus() {
   }, []);
 
   function reloadForUpdate() {
+    // vite-plugin-pwa's updateServiceWorker() only POSTs the skip-waiting
+    // message — the actual reload depends entirely on a 'controlling' event
+    // that isn't reliably fired everywhere (a known workbox-window gap,
+    // worse on Safari/iOS and some installed-PWA webviews). Without a
+    // fallback, a missed event leaves the button doing nothing and the
+    // banner stuck forever, which is exactly what was reported. Hide the
+    // banner immediately (clicking it should never look like it did
+    // nothing) and force a plain reload shortly after regardless — the
+    // no-cache headers on index.html/sw.js guarantee that reload fetches
+    // the current build even if the SW-level handoff never completes. If
+    // the proper skip-waiting reload fires first, the navigation happens
+    // before this timeout and it's simply never reached.
+    setNeedRefresh(false);
     updateSWRef.current?.(true);
+    setTimeout(() => window.location.reload(), 1500);
   }
 
   if (!isOffline && !needRefresh) return null;
