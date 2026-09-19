@@ -77,22 +77,44 @@ export function PwaStatus() {
     };
   }, []);
 
-  function reloadForUpdate() {
-    // vite-plugin-pwa's updateServiceWorker() only POSTs the skip-waiting
-    // message — the actual reload depends entirely on a 'controlling' event
-    // that isn't reliably fired everywhere (a known workbox-window gap,
-    // worse on Safari/iOS and some installed-PWA webviews). Without a
-    // fallback, a missed event leaves the button doing nothing and the
-    // banner stuck forever, which is exactly what was reported. Hide the
-    // banner immediately (clicking it should never look like it did
-    // nothing) and force a plain reload shortly after regardless — the
-    // no-cache headers on index.html/sw.js guarantee that reload fetches
-    // the current build even if the SW-level handoff never completes. If
-    // the proper skip-waiting reload fires first, the navigation happens
-    // before this timeout and it's simply never reached.
+  async function reloadForUpdate() {
+    // Hide the banner the instant the button is clicked — it should never
+    // look like the click did nothing, whatever happens next.
     setNeedRefresh(false);
+
+    let reloaded = false;
+    const hardReload = () => {
+      if (reloaded) return;
+      reloaded = true;
+      window.location.reload();
+    };
+
+    // The proper path: message whatever SW is actually waiting right now
+    // (fetched fresh, not a possibly-stale reference) to skip waiting, then
+    // reload once 'controllerchange' confirms it actually took control.
+    navigator.serviceWorker?.addEventListener('controllerchange', hardReload, { once: true });
+    const registration = await navigator.serviceWorker?.getRegistration();
+    registration?.waiting?.postMessage({ type: 'SKIP_WAITING' });
     updateSWRef.current?.(true);
-    setTimeout(() => window.location.reload(), 1500);
+
+    // Guaranteed fallback if that handoff never completes (a real,
+    // previously-reported failure mode — a known workbox-window gap, worse
+    // on Safari/iOS and some installed-PWA webviews). Naively falling back
+    // to a plain reload here does NOT help: this app's navigateFallback
+    // means EVERY navigation, reload included, is intercepted by whichever
+    // service worker is currently active and answered from its OWN
+    // precache — so a plain reload while the old, stuck worker is still
+    // active just re-serves that same stale shell, looking exactly like
+    // the click did nothing. Unregistering first removes that interception
+    // entirely, so this fallback reload is a genuine uncached network
+    // request that always lands on the current build (a fresh SW registers
+    // again on that load, same as any first visit).
+    setTimeout(async () => {
+      if (reloaded) return;
+      const registrations = await navigator.serviceWorker?.getRegistrations();
+      await Promise.all((registrations ?? []).map((r) => r.unregister()));
+      hardReload();
+    }, 2000);
   }
 
   if (!isOffline && !needRefresh) return null;
