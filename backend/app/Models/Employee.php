@@ -78,6 +78,31 @@ class Employee extends Model
         return $this->hasMany(Assignment::class);
     }
 
+    public function illnesses(): HasMany
+    {
+        return $this->hasMany(Illness::class);
+    }
+
+    public function overtimeEntries(): HasMany
+    {
+        return $this->hasMany(OvertimeEntry::class);
+    }
+
+    public function overtimeMonths(): HasMany
+    {
+        return $this->hasMany(OvertimeMonth::class);
+    }
+
+    public function entries(): HasMany
+    {
+        return $this->hasMany(Entry::class);
+    }
+
+    public function exits(): HasMany
+    {
+        return $this->hasMany(EmployeeExit::class);
+    }
+
     public function currentAssignment()
     {
         return $this->hasOne(Assignment::class)->where('is_current', true)->latestOfMany('start_date');

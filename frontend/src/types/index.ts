@@ -64,9 +64,14 @@ export interface Employee {
   attendances?: Attendance[];
   leave_requests?: LeaveRequest[];
   leaves?: Leave[];
+  illnesses?: Illness[];
   disciplinary_warnings?: DisciplinaryWarning[];
   suspensions?: Suspension[];
   assignments?: Assignment[];
+  overtime_entries?: OvertimeEntry[];
+  overtime_months?: OvertimeMonth[];
+  entries?: Entry[];
+  exits?: Exit[];
 }
 
 export type AttendanceStatus = 'present' | 'absent';

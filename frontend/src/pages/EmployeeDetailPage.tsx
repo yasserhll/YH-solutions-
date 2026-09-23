@@ -8,7 +8,7 @@ import { LoadingState } from '../components/ui/States';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import clsx from 'clsx';
 
-const tabs = ['Informations', 'Pointage', 'Congés', 'Sanctions', 'Affectations'] as const;
+const tabs = ['Informations', 'Pointage', 'Congés', 'Maladies', 'Sanctions', 'Heures sup.', 'Affectations', 'Mouvements'] as const;
 type Tab = (typeof tabs)[number];
 
 export default function EmployeeDetailPage() {
@@ -61,8 +61,11 @@ export default function EmployeeDetailPage() {
       {tab === 'Informations' && <InfoTab employee={employee} />}
       {tab === 'Pointage' && <AttendanceTab employee={employee} />}
       {tab === 'Congés' && <LeavesTab employee={employee} />}
+      {tab === 'Maladies' && <IllnessesTab employee={employee} />}
       {tab === 'Sanctions' && <SanctionsTab employee={employee} />}
+      {tab === 'Heures sup.' && <OvertimeTab employee={employee} />}
       {tab === 'Affectations' && <AssignmentsTab employee={employee} />}
+      {tab === 'Mouvements' && <MovementsTab employee={employee} />}
     </div>
   );
 }
@@ -103,6 +106,7 @@ function AttendanceTab({ employee }: { employee: Employee }) {
           <thead>
             <tr className="border-b border-slate-200 dark:border-slate-800 text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500">
               <th className="px-4 py-3 font-medium">Date</th>
+              <th className="px-4 py-3 font-medium">Site</th>
               <th className="px-4 py-3 font-medium">Statut</th>
               <th className="px-4 py-3 font-medium">Cause</th>
               <th className="px-4 py-3 font-medium">Description</th>
@@ -110,12 +114,16 @@ function AttendanceTab({ employee }: { employee: Employee }) {
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {rows.map((a) => (
-              <tr key={a.id}>
+              <tr key={a.id ?? `${a.date}-auto`}>
                 <td className="px-4 py-2.5">{new Date(a.date).toLocaleDateString('fr-FR')}</td>
+                <td className="px-4 py-2.5 text-slate-500 dark:text-slate-400">{a.site?.name ?? '—'}</td>
                 <td className="px-4 py-2.5">
                   <StatusBadge status={a.status} />
                 </td>
-                <td className="px-4 py-2.5">{a.absence_cause ? <StatusBadge status={a.absence_cause} /> : '—'}</td>
+                <td className="px-4 py-2.5">
+                  {a.absence_cause ? <StatusBadge status={a.absence_cause} /> : '—'}
+                  {a.auto && <span className="ml-1.5 text-xs text-slate-400 dark:text-slate-500">(auto)</span>}
+                </td>
                 <td className="px-4 py-2.5 text-slate-500 dark:text-slate-400">{a.description ?? '—'}</td>
               </tr>
             ))}
@@ -142,6 +150,7 @@ function LeavesTab({ employee }: { employee: Employee }) {
                 <thead>
                   <tr className="border-b border-slate-200 dark:border-slate-800 text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500">
                     <th className="px-4 py-3 font-medium">Demande le</th>
+                    <th className="px-4 py-3 font-medium">Site</th>
                     <th className="px-4 py-3 font-medium">Début souhaité</th>
                     <th className="px-4 py-3 font-medium">Durée</th>
                     <th className="px-4 py-3 font-medium">Statut</th>
@@ -151,6 +160,7 @@ function LeavesTab({ employee }: { employee: Employee }) {
                   {requests.map((r) => (
                     <tr key={r.id}>
                       <td className="px-4 py-2.5">{new Date(r.request_date).toLocaleDateString('fr-FR')}</td>
+                      <td className="px-4 py-2.5 text-slate-500 dark:text-slate-400">{r.site?.name ?? '—'}</td>
                       <td className="px-4 py-2.5">{new Date(r.desired_start_date).toLocaleDateString('fr-FR')}</td>
                       <td className="px-4 py-2.5">{r.duration_days} j</td>
                       <td className="px-4 py-2.5">
@@ -176,7 +186,7 @@ function LeavesTab({ employee }: { employee: Employee }) {
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">
                     {new Date(l.start_date).toLocaleDateString('fr-FR')} → {new Date(l.end_date).toLocaleDateString('fr-FR')} (
-                    {l.duration_days} j)
+                    {l.duration_days} j) <span className="font-normal text-slate-500 dark:text-slate-400">— {l.site?.name ?? '—'}</span>
                   </span>
                   <StatusBadge status={l.status} />
                 </div>
@@ -190,6 +200,162 @@ function LeavesTab({ employee }: { employee: Employee }) {
                     ))}
                   </div>
                 )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function IllnessesTab({ employee }: { employee: Employee }) {
+  const rows = employee.illnesses ?? [];
+  if (rows.length === 0) return <p className="text-sm text-slate-400 dark:text-slate-500">Aucune période de maladie déclarée.</p>;
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[520px] text-left text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 dark:border-slate-800 text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500">
+              <th className="px-4 py-3 font-medium">Site</th>
+              <th className="px-4 py-3 font-medium">Début</th>
+              <th className="px-4 py-3 font-medium">Fin</th>
+              <th className="px-4 py-3 font-medium">Description</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            {rows.map((i) => (
+              <tr key={i.id}>
+                <td className="px-4 py-2.5 text-slate-500 dark:text-slate-400">{i.site?.name ?? '—'}</td>
+                <td className="px-4 py-2.5">{new Date(i.start_date).toLocaleDateString('fr-FR')}</td>
+                <td className="px-4 py-2.5">{new Date(i.end_date).toLocaleDateString('fr-FR')}</td>
+                <td className="px-4 py-2.5 text-slate-500 dark:text-slate-400">{i.description ?? '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function OvertimeTab({ employee }: { employee: Employee }) {
+  const entries = employee.overtime_entries ?? [];
+  const months = employee.overtime_months ?? [];
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">Résumé par période de paie</h3>
+        {months.length === 0 ? (
+          <p className="text-sm text-slate-400 dark:text-slate-500">Aucune période.</p>
+        ) : (
+          <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[560px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-800 text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                    <th className="px-4 py-3 font-medium">Période (fin)</th>
+                    <th className="px-4 py-3 font-medium">Site</th>
+                    <th className="px-4 py-3 font-medium">Heures déclarées</th>
+                    <th className="px-4 py-3 font-medium">Jours acquis</th>
+                    <th className="px-4 py-3 font-medium">Statut</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {months.map((m) => (
+                    <tr key={m.id}>
+                      <td className="px-4 py-2.5">{new Date(m.month).toLocaleDateString('fr-FR')}</td>
+                      <td className="px-4 py-2.5 text-slate-500 dark:text-slate-400">{m.site?.name ?? '—'}</td>
+                      <td className="px-4 py-2.5">{m.declared_hours} h</td>
+                      <td className="px-4 py-2.5">{m.days_earned} j</td>
+                      <td className="px-4 py-2.5">
+                        <StatusBadge status={m.is_paid ? 'paye' : 'a_payer'} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h3 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">Déclarations</h3>
+        {entries.length === 0 ? (
+          <p className="text-sm text-slate-400 dark:text-slate-500">Aucune déclaration.</p>
+        ) : (
+          <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[480px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-800 text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                    <th className="px-4 py-3 font-medium">Date</th>
+                    <th className="px-4 py-3 font-medium">Site</th>
+                    <th className="px-4 py-3 font-medium">Heures</th>
+                    <th className="px-4 py-3 font-medium">Remarque</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {entries.map((e) => (
+                    <tr key={e.id}>
+                      <td className="px-4 py-2.5">{new Date(e.date).toLocaleDateString('fr-FR')}</td>
+                      <td className="px-4 py-2.5 text-slate-500 dark:text-slate-400">{e.site?.name ?? '—'}</td>
+                      <td className="px-4 py-2.5">{e.hours} h</td>
+                      <td className="px-4 py-2.5 text-slate-500 dark:text-slate-400">{e.remark ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MovementsTab({ employee }: { employee: Employee }) {
+  const entries = employee.entries ?? [];
+  const exits = employee.exits ?? [];
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">Entrées</h3>
+        {entries.length === 0 ? (
+          <p className="text-sm text-slate-400 dark:text-slate-500">Aucune entrée enregistrée.</p>
+        ) : (
+          <div className="space-y-2">
+            {entries.map((e) => (
+              <div key={e.id} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 text-sm">
+                <div className="font-medium">
+                  {new Date(e.entry_date).toLocaleDateString('fr-FR')} — {e.site?.name ?? '—'}
+                </div>
+                <p className="mt-1 text-slate-500 dark:text-slate-400">
+                  {e.department?.name ?? '—'} · {e.position?.name ?? '—'}
+                  {e.establishment ? ` · ${e.establishment}` : ''}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div>
+        <h3 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">Sorties</h3>
+        {exits.length === 0 ? (
+          <p className="text-sm text-slate-400 dark:text-slate-500">Aucune sortie enregistrée.</p>
+        ) : (
+          <div className="space-y-2">
+            {exits.map((e) => (
+              <div key={e.id} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 text-sm">
+                <div className="font-medium">
+                  {new Date(e.exit_date).toLocaleDateString('fr-FR')} — {e.site?.name ?? '—'}
+                  {e.reason ? ` (${e.reason})` : ''}
+                </div>
+                <p className="mt-1 text-slate-500 dark:text-slate-400">
+                  {e.department?.name ?? '—'} · {e.position?.name ?? '—'}
+                </p>
               </div>
             ))}
           </div>
@@ -213,7 +379,8 @@ function SanctionsTab({ employee }: { employee: Employee }) {
             {warnings.map((w) => (
               <div key={w.id} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 text-sm">
                 <div className="font-medium">
-                  {new Date(w.date).toLocaleDateString('fr-FR')} — {w.reason}
+                  {new Date(w.date).toLocaleDateString('fr-FR')} — {w.reason}{' '}
+                  <span className="font-normal text-slate-500 dark:text-slate-400">({w.site?.name ?? '—'})</span>
                 </div>
                 {w.description && <p className="mt-1 text-slate-500 dark:text-slate-400">{w.description}</p>}
               </div>
@@ -231,7 +398,8 @@ function SanctionsTab({ employee }: { employee: Employee }) {
               <div key={s.id} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 text-sm">
                 <div className="font-medium">
                   {new Date(s.start_date).toLocaleDateString('fr-FR')} → {new Date(s.end_date).toLocaleDateString('fr-FR')} (
-                  {s.duration_days} j) — {s.reason}
+                  {s.duration_days} j) — {s.reason}{' '}
+                  <span className="font-normal text-slate-500 dark:text-slate-400">({s.site?.name ?? '—'})</span>
                 </div>
                 {s.description && <p className="mt-1 text-slate-500 dark:text-slate-400">{s.description}</p>}
               </div>
@@ -254,6 +422,7 @@ function AssignmentsTab({ employee }: { employee: Employee }) {
             <tr className="border-b border-slate-200 dark:border-slate-800 text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500">
               <th className="px-4 py-3 font-medium">Début</th>
               <th className="px-4 py-3 font-medium">Fin</th>
+              <th className="px-4 py-3 font-medium">Site</th>
               <th className="px-4 py-3 font-medium">Département</th>
               <th className="px-4 py-3 font-medium">Fonction</th>
               <th className="px-4 py-3 font-medium">Actuelle</th>
@@ -264,6 +433,7 @@ function AssignmentsTab({ employee }: { employee: Employee }) {
               <tr key={a.id}>
                 <td className="px-4 py-2.5">{new Date(a.start_date).toLocaleDateString('fr-FR')}</td>
                 <td className="px-4 py-2.5">{a.end_date ? new Date(a.end_date).toLocaleDateString('fr-FR') : '—'}</td>
+                <td className="px-4 py-2.5 text-slate-500 dark:text-slate-400">{a.site?.name ?? '—'}</td>
                 <td className="px-4 py-2.5">{a.department?.name ?? '—'}</td>
                 <td className="px-4 py-2.5">{a.position?.name ?? '—'}</td>
                 <td className="px-4 py-2.5">{a.is_current ? <StatusBadge status="actif" /> : '—'}</td>

@@ -93,6 +93,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // store/update/destroy) stays here — only the read-only index above
         // is shared with a responsable_hse.
         Route::apiResource('employees', EmployeeController::class)->except(['index']);
+        Route::post('/employees/{employee}/transfer-site', [EmployeeController::class, 'transferSite']);
 
         Route::apiResource('cash-transactions', CashTransactionController::class)->only(['index', 'store']);
         Route::get('/cash-account', [CashAccountController::class, 'show']);
