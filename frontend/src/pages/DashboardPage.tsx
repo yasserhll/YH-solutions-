@@ -1,24 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
-import {
-  Users,
-  UserCheck,
-  UserX,
-  CalendarClock,
-  UserPlus,
-  UserMinus,
-  CalendarDays,
-  CalendarCheck,
-  Hourglass,
-  ShieldAlert,
-  Ban,
-  Wallet,
-  TrendingDown,
-} from 'lucide-react';
 import { api } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
 import type { DashboardData } from '../types';
-import { KpiCard } from '../components/ui/KpiCard';
 import { LoadingState } from '../components/ui/States';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { DonutStat } from '../components/ui/DonutStat';
@@ -38,15 +22,6 @@ export default function DashboardPage() {
 
   if (isLoading || !data) return <LoadingState rows={8} />;
 
-  const totalAbsentToday =
-    data.attendance.absent_maladie +
-    data.attendance.absent_autorisee +
-    data.attendance.absent_non_autorisee +
-    data.attendance.absent_mise_a_pied +
-    data.attendance.absent_conge +
-    data.attendance.absent_stc;
-  const nonPointes = Math.max(data.personnel.total - data.attendance.present - totalAbsentToday, 0);
-
   const totalMovements30d = data.personnel.new_employees_30d + data.personnel.recent_exits_30d;
 
   return (
@@ -56,12 +31,15 @@ export default function DashboardPage() {
           Vue graphique
         </h2>
         <div className="grid gap-6 lg:grid-cols-2">
+          {/* Every employee is either présent or absent today — never a third
+              "non pointé" bucket, since a normal day defaults to présent and
+              a Sunday/holiday defaults to absent unless manually corrected
+              (see DashboardController@index and AttendanceController::daily). */}
           <DonutStat
             title="Pointage du jour"
             segments={[
-              { name: 'Présents', value: data.attendance.present, color: '#22c55e', to: '/pointage' },
-              { name: 'Absents', value: totalAbsentToday, color: '#ef4444', to: '/pointage' },
-              { name: 'Non pointés', value: nonPointes, color: '#94a3b8', to: '/pointage' },
+              { name: 'Présents', value: data.personnel.present_today, color: '#22c55e', to: '/pointage' },
+              { name: 'Absents', value: data.personnel.absent_today, color: '#ef4444', to: '/pointage' },
             ]}
           />
 
@@ -139,113 +117,6 @@ export default function DashboardPage() {
           </div>
         </div>
       </section>
-
-      <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Personnel</h2>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-          <KpiCard label="Total employés" value={data.personnel.total} icon={Users} to="/personnel" />
-          <KpiCard label="Présents aujourd'hui" value={data.personnel.present_today} icon={UserCheck} tone="green" to="/pointage" />
-          <KpiCard label="Absents aujourd'hui" value={data.personnel.absent_today} icon={UserX} tone="red" to="/pointage" />
-          <KpiCard
-            label="Congés en cours"
-            value={data.personnel.leaves_in_progress}
-            icon={CalendarClock}
-            tone="blue"
-            to="/conges?tab=conges-en-cours"
-          />
-          <KpiCard label="Nouveaux (30j)" value={data.personnel.new_employees_30d} icon={UserPlus} tone="purple" to="/personnel" />
-          <KpiCard
-            label="Sorties récentes"
-            value={data.personnel.recent_exits_30d}
-            icon={UserMinus}
-            tone="amber"
-            to="/mouvements?tab=sorties"
-          />
-        </div>
-      </section>
-
-      <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Pointage du jour</h2>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-          <KpiCard label="Présents" value={data.attendance.present} icon={UserCheck} tone="green" to="/pointage" />
-          <KpiCard label="Absents maladie" value={data.attendance.absent_maladie} icon={UserX} tone="amber" to="/pointage" />
-          <KpiCard label="Absents autorisée" value={data.attendance.absent_autorisee} icon={UserX} tone="blue" to="/pointage" />
-          <KpiCard label="Absents mise à pied" value={data.attendance.absent_mise_a_pied} icon={UserX} tone="teal" to="/pointage" />
-          <KpiCard
-            label="Absents non autorisée"
-            value={data.attendance.absent_non_autorisee}
-            icon={UserX}
-            tone="red"
-            to="/pointage"
-          />
-          <KpiCard label="Absents en congé" value={data.attendance.absent_conge} icon={UserX} tone="purple" to="/pointage" />
-          <KpiCard label="STC (sorties)" value={data.attendance.absent_stc} icon={UserMinus} tone="slate" to="/mouvements?tab=sorties" />
-        </div>
-      </section>
-
-      <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Congés</h2>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <KpiCard label="Demandes en attente" value={data.leaves.pending} icon={Hourglass} tone="amber" to="/conges?tab=demandes" />
-          <KpiCard label="Congés acceptés" value={data.leaves.accepted} icon={CalendarCheck} tone="green" to="/conges?tab=demandes" />
-          <KpiCard
-            label="Congés en cours"
-            value={data.leaves.in_progress}
-            icon={CalendarDays}
-            tone="blue"
-            to="/conges?tab=conges-en-cours"
-          />
-          <KpiCard
-            label="Congés terminés"
-            value={data.leaves.completed}
-            icon={CalendarCheck}
-            tone="slate"
-            to="/conges?tab=conges-en-cours"
-          />
-        </div>
-      </section>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Sanctions</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <KpiCard
-              label="Avertissements"
-              value={data.sanctions.warnings}
-              icon={ShieldAlert}
-              tone="amber"
-              to="/sanctions?tab=avertissements"
-            />
-            <KpiCard label="Mises à pied" value={data.sanctions.suspensions} icon={Ban} tone="red" to="/sanctions?tab=mises-a-pied" />
-          </div>
-        </section>
-
-        <section>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Caisse</h2>
-          <div className="grid grid-cols-2 gap-4">
-            {data.cash.current_balance !== null && (
-              <KpiCard
-                label="Solde caisse global actuel"
-                value={money(data.cash.current_balance)}
-                icon={Wallet}
-                tone={data.cash.current_balance < 0 ? 'red' : 'green'}
-                to="/caisse"
-              />
-            )}
-            {data.cash.site_balances?.map((s) => (
-              <KpiCard
-                key={s.site_id}
-                label={data.cash.site_balances!.length > 1 || s.site_ids.length > 1 ? `Solde ${s.site_name}` : 'Solde de mon site'}
-                value={money(s.balance)}
-                icon={Wallet}
-                tone={s.balance <= 0 ? 'red' : 'green'}
-                to="/caisse"
-              />
-            ))}
-            <KpiCard label="Dépenses du mois" value={money(data.cash.expenses_month)} icon={TrendingDown} tone="red" to="/caisse" />
-          </div>
-        </section>
-      </div>
     </div>
   );
 }

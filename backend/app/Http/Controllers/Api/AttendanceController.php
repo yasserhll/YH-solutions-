@@ -118,7 +118,7 @@ class AttendanceController extends Controller
                 ];
             }
 
-            $autoCause = $autoCauses[$employee->id] ?? null;
+            $auto = $autoCauses[$employee->id] ?? null;
 
             return [
                 'employee_id' => $employee->id,
@@ -126,10 +126,10 @@ class AttendanceController extends Controller
                 'site' => $employee->site->name,
                 'date' => $date,
                 'attendance_id' => null,
-                'status' => $autoCause ? 'absent' : $defaultStatus,
-                'absence_cause' => $autoCause,
-                'description' => null,
-                'auto' => (bool) $autoCause,
+                'status' => $auto ? 'absent' : $defaultStatus,
+                'absence_cause' => $auto['cause'] ?? null,
+                'description' => $auto['description'] ?? null,
+                'auto' => (bool) $auto,
             ];
         });
 

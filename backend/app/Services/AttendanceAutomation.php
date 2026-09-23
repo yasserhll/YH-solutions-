@@ -25,7 +25,16 @@ use Illuminate\Support\Collection;
  */
 class AttendanceAutomation
 {
-    /** employeeId => cause, for every employee in $employeeIds with an active period covering $date. */
+    /**
+     * employeeId => ['cause' => ..., 'description' => ...], for every
+     * employee in $employeeIds with an active period covering $date. Carries
+     * the period's own note through (Illness `description`, Suspension
+     * `description` falling back to `reason`, Leave `reason`) — this used to
+     * only return the bare cause string, which meant AttendanceController::
+     * daily() could never show what was actually typed when the period was
+     * declared, always rendering an empty Description column for an
+     * auto-derived row.
+     */
     public static function causesForDate(array $employeeIds, string $date): array
     {
         if (empty($employeeIds)) {
@@ -37,20 +46,26 @@ class AttendanceAutomation
         Suspension::whereIn('employee_id', $employeeIds)
             ->whereDate('start_date', '<=', $date)
             ->whereDate('end_date', '>=', $date)
-            ->pluck('employee_id')
-            ->each(function ($id) use (&$causes) { $causes[$id] = 'mise_a_pied'; });
+            ->get(['employee_id', 'reason', 'description'])
+            ->each(function ($s) use (&$causes) {
+                $causes[$s->employee_id] = ['cause' => 'mise_a_pied', 'description' => $s->description ?? $s->reason];
+            });
 
         Leave::whereIn('employee_id', $employeeIds)
             ->whereDate('start_date', '<=', $date)
             ->whereDate('end_date', '>=', $date)
-            ->pluck('employee_id')
-            ->each(function ($id) use (&$causes) { $causes[$id] = 'conge'; });
+            ->get(['employee_id', 'reason'])
+            ->each(function ($l) use (&$causes) {
+                $causes[$l->employee_id] = ['cause' => 'conge', 'description' => $l->reason];
+            });
 
         Illness::whereIn('employee_id', $employeeIds)
             ->whereDate('start_date', '<=', $date)
             ->whereDate('end_date', '>=', $date)
-            ->pluck('employee_id')
-            ->each(function ($id) use (&$causes) { $causes[$id] = 'maladie'; });
+            ->get(['employee_id', 'description'])
+            ->each(function ($i) use (&$causes) {
+                $causes[$i->employee_id] = ['cause' => 'maladie', 'description' => $i->description];
+            });
 
         return $causes;
     }
@@ -101,7 +116,14 @@ class AttendanceAutomation
                         'date' => $cursor->toDateString(),
                         'status' => 'absent',
                         'absence_cause' => $cause,
-                        'description' => null,
+                        // The period record itself carries the actual note
+                        // (Illness only has `description`, Suspension has
+                        // both, Leave only has `reason`) — this used to be
+                        // hardcoded to null, silently dropping whatever the
+                        // responsable typed when declaring the period on
+                        // every day the daily sheet/Rapports/fiche derive
+                        // from it instead of a real Attendance row.
+                        'description' => $period->description ?? $period->reason ?? null,
                         'auto' => true,
                     ];
                 }
