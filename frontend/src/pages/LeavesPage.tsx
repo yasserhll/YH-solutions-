@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Plus, Plane, Pencil, Trash2 } from 'lucide-react';
@@ -22,9 +23,15 @@ const tabs = ['Demandes', 'Congés en cours'] as const;
 
 export default function LeavesPage() {
   const [tab, setTab] = useUrlTab(tabs, 'Demandes');
+  const [searchParams] = useSearchParams();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [monthFilter, setMonthFilter] = useState('');
+  // A Dashboard KPI click ("Acceptés"/"Refusée"/"En cours"...) lands here
+  // with ?status= pre-filled — read once on mount so the click actually
+  // narrows the list to that one status instead of showing everything.
+  const [requestStatusFilter, setRequestStatusFilter] = useState(() => searchParams.get('status') ?? '');
+  const [takenStatusFilter, setTakenStatusFilter] = useState(() => searchParams.get('status') ?? '');
   const [showRequestForm, setShowRequestForm] = useState(false);
   const [showLeaveForm, setShowLeaveForm] = useState(false);
   const [editingRequest, setEditingRequest] = useState<LeaveRequest | null>(null);
@@ -36,17 +43,29 @@ export default function LeavesPage() {
   const queryClient = useQueryClient();
 
   const requestsQuery = useQuery({
-    queryKey: ['leave-requests', siteParams, page, search],
+    queryKey: ['leave-requests', siteParams, page, search, requestStatusFilter],
     queryFn: () =>
-      api.get<Paginated<LeaveRequest>>('/leave-requests', { params: { ...siteParams, page, search: search || undefined } }).then((r) => r.data),
+      api
+        .get<Paginated<LeaveRequest>>('/leave-requests', {
+          params: { ...siteParams, page, search: search || undefined, status: requestStatusFilter || undefined },
+        })
+        .then((r) => r.data),
     enabled: tab === 'Demandes',
   });
 
   const leavesQuery = useQuery({
-    queryKey: ['leaves', siteParams, page, search, monthFilter],
+    queryKey: ['leaves', siteParams, page, search, monthFilter, takenStatusFilter],
     queryFn: () =>
       api
-        .get<Paginated<Leave>>('/leaves', { params: { ...siteParams, page, search: search || undefined, month: monthFilter || undefined } })
+        .get<Paginated<Leave>>('/leaves', {
+          params: {
+            ...siteParams,
+            page,
+            search: search || undefined,
+            month: monthFilter || undefined,
+            status: takenStatusFilter || undefined,
+          },
+        })
         .then((r) => r.data),
     enabled: tab === 'Congés en cours',
   });
@@ -192,8 +211,30 @@ export default function LeavesPage() {
         <div className="w-full sm:w-64">
           <SearchInput placeholder="Rechercher par nom..." value={search} onChange={(e) => (setSearch(e.target.value), setPage(1))} />
         </div>
+        {tab === 'Demandes' && (
+          <select
+            value={requestStatusFilter}
+            onChange={(e) => (setRequestStatusFilter(e.target.value), setPage(1))}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+          >
+            <option value="">Tous les statuts</option>
+            <option value="en_attente">En attente</option>
+            <option value="acceptee">Acceptée</option>
+            <option value="refusee">Refusée</option>
+            <option value="annulee">Annulée</option>
+          </select>
+        )}
         {tab === 'Congés en cours' && (
           <>
+            <select
+              value={takenStatusFilter}
+              onChange={(e) => (setTakenStatusFilter(e.target.value), setPage(1))}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+            >
+              <option value="">Tous les statuts</option>
+              <option value="en_cours">En cours</option>
+              <option value="termine">Terminé</option>
+            </select>
             <input
               type="month"
               value={monthFilter}

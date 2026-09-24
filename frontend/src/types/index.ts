@@ -460,6 +460,8 @@ export interface DashboardData {
   leaves: {
     pending: number;
     accepted: number;
+    refused: number;
+    cancelled: number;
     in_progress: number;
     completed: number;
   };

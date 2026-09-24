@@ -101,6 +101,8 @@ class DashboardController extends Controller
             'leaves' => [
                 'pending' => (clone $leaveRequests)->where('status', 'en_attente')->count(),
                 'accepted' => (clone $leaveRequests)->where('status', 'acceptee')->count(),
+                'refused' => (clone $leaveRequests)->where('status', 'refusee')->count(),
+                'cancelled' => (clone $leaveRequests)->where('status', 'annulee')->count(),
                 'in_progress' => (clone $leaves)->inProgress()->count(),
                 'completed' => (clone $leaves)->finished()->count(),
             ],

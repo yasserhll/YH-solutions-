@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { UserX, Pencil, Download, CalendarOff, Trash2, X } from 'lucide-react';
@@ -28,9 +29,13 @@ const causeLabels: Record<AbsenceCause, string> = {
 export default function AttendancePage() {
   const siteParams = useSiteParams();
   const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  // A Dashboard KPI click ("Présents"/"Absents") lands here with ?status=
+  // pre-filled — read once on mount so the click actually narrows the sheet
+  // to that one status instead of showing everyone mixed together.
+  const [statusFilter, setStatusFilter] = useState(() => searchParams.get('status') ?? '');
   const [selected, setSelected] = useState<number[]>([]);
   const [absenceTarget, setAbsenceTarget] = useState<DailyAttendanceRow | DailyAttendanceRow[] | null>(null);
   const [showHolidayForm, setShowHolidayForm] = useState(false);

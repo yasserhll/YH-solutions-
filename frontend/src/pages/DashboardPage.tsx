@@ -38,19 +38,21 @@ export default function DashboardPage() {
           <DonutStat
             title="Pointage du jour"
             segments={[
-              { name: 'Présents', value: data.personnel.present_today, color: '#22c55e', to: '/pointage' },
-              { name: 'Absents', value: data.personnel.absent_today, color: '#ef4444', to: '/pointage' },
+              { name: 'Présents', value: data.personnel.present_today, color: '#22c55e', to: '/pointage?status=present' },
+              { name: 'Absents', value: data.personnel.absent_today, color: '#ef4444', to: '/pointage?status=absent' },
             ]}
           />
 
           <SegmentedBar
             title="Congés"
-            subtitle={`${data.leaves.pending + data.leaves.accepted + data.leaves.in_progress + data.leaves.completed} dossiers suivis`}
+            subtitle={`${data.leaves.pending + data.leaves.accepted + data.leaves.refused + data.leaves.cancelled + data.leaves.in_progress + data.leaves.completed} dossiers suivis`}
             segments={[
-              { name: 'En attente', value: data.leaves.pending, color: '#f59e0b', to: '/conges?tab=demandes' },
-              { name: 'Acceptés', value: data.leaves.accepted, color: '#22c55e', to: '/conges?tab=demandes' },
-              { name: 'En cours', value: data.leaves.in_progress, color: '#3b82f6', to: '/conges?tab=conges-en-cours' },
-              { name: 'Terminés', value: data.leaves.completed, color: '#94a3b8', to: '/conges?tab=conges-en-cours' },
+              { name: 'En attente', value: data.leaves.pending, color: '#f59e0b', to: '/conges?tab=demandes&status=en_attente' },
+              { name: 'Acceptés', value: data.leaves.accepted, color: '#22c55e', to: '/conges?tab=demandes&status=acceptee' },
+              { name: 'Refusés', value: data.leaves.refused, color: '#ef4444', to: '/conges?tab=demandes&status=refusee' },
+              { name: 'Annulés', value: data.leaves.cancelled, color: '#94a3b8', to: '/conges?tab=demandes&status=annulee' },
+              { name: 'En cours', value: data.leaves.in_progress, color: '#3b82f6', to: '/conges?tab=conges-en-cours&status=en_cours' },
+              { name: 'Terminés', value: data.leaves.completed, color: '#64748b', to: '/conges?tab=conges-en-cours&status=termine' },
             ]}
           />
 
@@ -66,7 +68,7 @@ export default function DashboardPage() {
             title="Mouvements de personnel"
             subtitle={`${totalMovements30d} mouvements sur les 30 derniers jours`}
             segments={[
-              { name: 'Nouveaux employés', value: data.personnel.new_employees_30d, color: '#3b82f6', to: '/personnel' },
+              { name: 'Nouveaux employés', value: data.personnel.new_employees_30d, color: '#3b82f6', to: '/mouvements?tab=entrees' },
               { name: 'Sorties', value: data.personnel.recent_exits_30d, color: '#f59e0b', to: '/mouvements?tab=sorties' },
             ]}
           />
