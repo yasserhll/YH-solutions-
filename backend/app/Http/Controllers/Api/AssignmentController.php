@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\InteractsWithSites;
 use App\Http\Controllers\Controller;
 use App\Models\Assignment;
 use App\Models\Employee;
+use App\Services\AuditLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -64,6 +65,13 @@ class AssignmentController extends Controller
                 'position_id' => $data['position_id'] ?? $employee->position_id,
             ]);
 
+            AuditLogger::log(
+                'assignment.created',
+                "Affectation — {$employee->full_name} ({$assignment->department?->name}, {$assignment->position?->name})",
+                $assignment->site_id,
+                $assignment
+            );
+
             return response()->json($assignment->load(['employee', 'site', 'department', 'position']), 201);
         });
     }
@@ -93,13 +101,23 @@ class AssignmentController extends Controller
             ]);
         }
 
+        AuditLogger::log(
+            'assignment.updated',
+            "Affectation modifiée — {$assignment->employee->full_name}",
+            $assignment->site_id,
+            $assignment
+        );
+
         return $assignment->load(['employee', 'site', 'department', 'position']);
     }
 
     public function destroy(Request $request, Assignment $assignment)
     {
         $this->ensureSiteAccess($request, $assignment->site_id);
+        $employeeName = $assignment->employee->full_name;
         $assignment->delete();
+
+        AuditLogger::log('assignment.deleted', "Affectation supprimée — {$employeeName}", $assignment->site_id, $assignment);
 
         return response()->json(['message' => 'Affectation supprimée.']);
     }

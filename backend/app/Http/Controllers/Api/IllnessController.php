@@ -8,6 +8,7 @@ use App\Http\Requests\StoreIllnessRequest;
 use App\Models\Employee;
 use App\Models\Illness;
 use App\Services\AttendanceAutomation;
+use App\Services\AuditLogger;
 use Illuminate\Http\Request;
 
 /**
@@ -53,6 +54,13 @@ class IllnessController extends Controller
         // auto-derived "Absent - Maladie" default forever on Pointage.
         AttendanceAutomation::reconcilePeriod($illness->employee_id, $illness->start_date->toDateString(), $illness->end_date->toDateString());
 
+        AuditLogger::log(
+            'illness.declared',
+            "Maladie déclarée — {$employee->full_name} du {$illness->start_date->format('d/m/Y')} au {$illness->end_date->format('d/m/Y')}",
+            $illness->site_id,
+            $illness
+        );
+
         return response()->json($illness->load(['employee', 'site']), 201);
     }
 
@@ -63,13 +71,23 @@ class IllnessController extends Controller
         $illness->update($request->validated());
         AttendanceAutomation::reconcilePeriod($illness->employee_id, $illness->start_date->toDateString(), $illness->end_date->toDateString());
 
+        AuditLogger::log(
+            'illness.updated',
+            "Maladie modifiée — {$illness->employee->full_name} du {$illness->start_date->format('d/m/Y')} au {$illness->end_date->format('d/m/Y')}",
+            $illness->site_id,
+            $illness
+        );
+
         return $illness->load(['employee', 'site']);
     }
 
     public function destroy(Request $request, Illness $illness)
     {
         $this->ensureSiteAccess($request, $illness->site_id);
+        $employeeName = $illness->employee->full_name;
         $illness->delete();
+
+        AuditLogger::log('illness.deleted', "Maladie supprimée — {$employeeName}", $illness->site_id, $illness);
 
         return response()->json(['message' => 'Période de maladie supprimée.']);
     }

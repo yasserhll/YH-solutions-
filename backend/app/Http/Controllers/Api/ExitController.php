@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Assignment;
 use App\Models\Employee;
 use App\Models\EmployeeExit;
+use App\Services\AuditLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -78,6 +79,8 @@ class ExitController extends Controller
                 ]);
             }
 
+            AuditLogger::log('exit.created', "Sortie — {$exit->full_name}", $exit->site_id, $exit);
+
             return response()->json($exit->load(['employee', 'site', 'department', 'position']), 201);
         });
     }
@@ -105,6 +108,8 @@ class ExitController extends Controller
             $exit->employee->update(['exit_date' => $data['exit_date']]);
         }
 
+        AuditLogger::log('exit.updated', "Sortie modifiée — {$exit->full_name}", $exit->site_id, $exit);
+
         return $exit->load(['employee', 'site', 'department', 'position']);
     }
 
@@ -118,7 +123,11 @@ class ExitController extends Controller
         $this->ensureSiteAccess($request, $exit->site_id);
 
         return DB::transaction(function () use ($exit) {
+            $fullName = $exit->full_name;
+            $siteId = $exit->site_id;
             $this->revertEmployeeDeparture($exit);
+
+            AuditLogger::log('exit.cancelled', "Sortie annulée — {$fullName}", $siteId, $exit);
 
             return response()->json(['message' => 'Sortie supprimée.']);
         });

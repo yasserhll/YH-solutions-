@@ -13,6 +13,7 @@ import {
   Users,
   UserCog,
   FileBarChart,
+  History,
   Settings,
   HardHat,
   PanelLeft,
@@ -75,6 +76,7 @@ const navItems = [
 const settingsNavItems = [
   { to: '/utilisateurs', label: 'Utilisateurs', icon: UserCog, superadminOnly: true },
   { to: '/rapports', label: 'Rapports', icon: FileBarChart },
+  { to: '/historique', label: 'Historique', icon: History },
   { to: '/parametres', label: 'Paramètres', icon: Settings, superadminOnly: true },
 ];
 

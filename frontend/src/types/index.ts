@@ -412,6 +412,25 @@ export interface CashSiteBalance {
   sites: CashAccountSiteSummary[];
 }
 
+/**
+ * One row per mutating action (Historique page, Paramètres) — a plain
+ * activity feed entry. `description` is a ready-to-display French sentence
+ * written once by the backend's AuditLogger, never reconstructed from
+ * old_values/new_values on the frontend. `action` is `<module>.<verb>`
+ * (e.g. `attendance.absent`, `leave.deleted`) — the module prefix is what
+ * the Historique page's filter dropdown groups by.
+ */
+export interface AuditLog {
+  id: number;
+  user_id: number | null;
+  site_id: number | null;
+  action: string;
+  description: string;
+  created_at: string;
+  user?: { id: number; name: string } | null;
+  site?: Site | null;
+}
+
 export interface Paginated<T> {
   data: T[];
   current_page: number;

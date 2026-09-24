@@ -7,7 +7,9 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreEmployeeRequest;
 use App\Models\Assignment;
 use App\Models\Employee;
+use App\Models\Site;
 use App\Services\AttendanceAutomation;
+use App\Services\AuditLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 
@@ -101,6 +103,8 @@ class EmployeeController extends Controller
             'created_by' => $request->user()->id,
         ]);
 
+        AuditLogger::log('employee.created', "Employé créé — {$employee->full_name}", $employee->site_id, $employee);
+
         return response()->json($employee->load(['site', 'department', 'position']), 201);
     }
 
@@ -125,12 +129,21 @@ class EmployeeController extends Controller
         }
 
         $siteChanged = isset($data['site_id']) && (int) $data['site_id'] !== $employee->site_id;
+        $oldSiteName = $siteChanged ? Site::find($employee->site_id)?->name : null;
 
         $employee->update($data);
 
         if ($siteChanged) {
             $this->recordSiteTransfer($employee, $request->user()->id);
+            AuditLogger::log(
+                'employee.transferred',
+                "{$employee->full_name} affecté de {$oldSiteName} à {$employee->site->name}",
+                $employee->site_id,
+                $employee
+            );
         }
+
+        AuditLogger::log('employee.updated', "Employé modifié — {$employee->full_name}", $employee->site_id, $employee);
 
         return $employee->load(['site', 'department', 'position']);
     }
@@ -167,8 +180,17 @@ class EmployeeController extends Controller
             return $employee->load(['site', 'department', 'position']);
         }
 
+        $oldSiteName = Site::find($employee->site_id)?->name;
+
         $employee->update(['site_id' => $data['site_id']]);
         $this->recordSiteTransfer($employee, $request->user()->id);
+
+        AuditLogger::log(
+            'employee.transferred',
+            "{$employee->full_name} affecté de {$oldSiteName} à {$employee->site->name}",
+            $employee->site_id,
+            $employee
+        );
 
         return $employee->load(['site', 'department', 'position']);
     }
@@ -176,7 +198,10 @@ class EmployeeController extends Controller
     public function destroy(Request $request, Employee $employee)
     {
         $this->ensureSiteAccess($request, $employee->site_id);
+        $fullName = $employee->full_name;
         $employee->delete();
+
+        AuditLogger::log('employee.deleted', "Employé supprimé — {$fullName}", $employee->site_id, $employee);
 
         return response()->json(['message' => 'Employé supprimé.']);
     }

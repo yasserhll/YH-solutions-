@@ -12,6 +12,7 @@ use App\Models\Employee;
 use App\Models\EmployeeExit;
 use App\Models\Holiday;
 use App\Services\AttendanceAutomation;
+use App\Services\AuditLogger;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -183,7 +184,35 @@ class AttendanceController extends Controller
             return $attendance;
         });
 
+        AuditLogger::log(
+            'attendance.'.$data['status'],
+            $this->pointageDescription($employee, $data['date'], $data['status'], $data['absence_cause'] ?? null),
+            $employee->site_id,
+            $attendance
+        );
+
         return response()->json($attendance->load(['employee', 'site']), 201);
+    }
+
+    private static array $causeLabels = [
+        'maladie' => 'Maladie',
+        'autorisee' => 'Autorisée',
+        'non_autorisee' => 'Non autorisée',
+        'conge' => 'Congé',
+        'mise_a_pied' => 'Mise à pied',
+        'stc' => 'STC',
+    ];
+
+    private function pointageDescription(Employee $employee, string $date, string $status, ?string $cause): string
+    {
+        $when = \Carbon\Carbon::parse($date)->format('d/m/Y');
+        if ($status === 'present') {
+            return "{$employee->full_name} marqué présent le {$when}";
+        }
+
+        $causeLabel = self::$causeLabels[$cause] ?? $cause;
+
+        return "{$employee->full_name} marqué absent ({$causeLabel}) le {$when}";
     }
 
     /**
@@ -256,6 +285,13 @@ class AttendanceController extends Controller
                     $this->recordStcExit($employee, $data['date'], $request);
                 }
 
+                AuditLogger::log(
+                    'attendance.'.$data['status'],
+                    $this->pointageDescription($employee, $data['date'], $data['status'], $data['absence_cause'] ?? null),
+                    $employee->site_id,
+                    $attendance
+                );
+
                 return $attendance;
             });
         });
@@ -281,6 +317,13 @@ class AttendanceController extends Controller
             }
         });
 
+        AuditLogger::log(
+            'attendance.corrected',
+            $this->pointageDescription($attendance->employee, $data['date'], $data['status'], $data['absence_cause'] ?? null),
+            $attendance->site_id,
+            $attendance
+        );
+
         return $attendance->load(['employee', 'site']);
     }
 
@@ -301,6 +344,9 @@ class AttendanceController extends Controller
     {
         $this->ensureSiteAccess($request, $attendance->site_id);
 
+        $employee = $attendance->employee;
+        $date = $attendance->date->toDateString();
+
         DB::transaction(function () use ($attendance) {
             if ($attendance->status === 'absent' && $attendance->absence_cause === 'stc') {
                 // Matched on reason too: if a manual Sortie happens to exist
@@ -319,6 +365,13 @@ class AttendanceController extends Controller
 
             $attendance->delete();
         });
+
+        AuditLogger::log(
+            'attendance.cancelled',
+            "Pointage annulé — {$employee->full_name} le ".\Carbon\Carbon::parse($date)->format('d/m/Y'),
+            $attendance->site_id,
+            $attendance
+        );
 
         return response()->json(['message' => 'Pointage annulé.']);
     }

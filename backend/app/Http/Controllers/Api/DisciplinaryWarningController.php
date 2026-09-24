@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\InteractsWithSites;
 use App\Http\Controllers\Controller;
 use App\Models\DisciplinaryWarning;
 use App\Models\Employee;
+use App\Services\AuditLogger;
 use Illuminate\Http\Request;
 
 class DisciplinaryWarningController extends Controller
@@ -48,6 +49,8 @@ class DisciplinaryWarningController extends Controller
 
         $warning = DisciplinaryWarning::create($data);
 
+        AuditLogger::log('warning.created', "Avertissement — {$employee->full_name} ({$warning->reason})", $warning->site_id, $warning);
+
         return response()->json($warning->load(['employee', 'site']), 201);
     }
 
@@ -57,13 +60,23 @@ class DisciplinaryWarningController extends Controller
         $data = $request->validate($this->rules());
         $disciplinaryWarning->update($data);
 
+        AuditLogger::log(
+            'warning.updated',
+            "Avertissement modifié — {$disciplinaryWarning->employee->full_name}",
+            $disciplinaryWarning->site_id,
+            $disciplinaryWarning
+        );
+
         return $disciplinaryWarning->load(['employee', 'site']);
     }
 
     public function destroy(Request $request, DisciplinaryWarning $disciplinaryWarning)
     {
         $this->ensureSiteAccess($request, $disciplinaryWarning->site_id);
+        $employeeName = $disciplinaryWarning->employee->full_name;
         $disciplinaryWarning->delete();
+
+        AuditLogger::log('warning.deleted', "Avertissement supprimé — {$employeeName}", $disciplinaryWarning->site_id, $disciplinaryWarning);
 
         return response()->json(['message' => 'Avertissement supprimé.']);
     }

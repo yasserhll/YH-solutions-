@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Employee;
 use App\Models\Suspension;
 use App\Services\AttendanceAutomation;
+use App\Services\AuditLogger;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -59,6 +60,13 @@ class SuspensionController extends Controller
         // on Pointage.
         AttendanceAutomation::reconcilePeriod($suspension->employee_id, $suspension->start_date->toDateString(), $suspension->end_date->toDateString());
 
+        AuditLogger::log(
+            'suspension.created',
+            "Mise à pied — {$employee->full_name} du {$suspension->start_date->format('d/m/Y')} au {$suspension->end_date->format('d/m/Y')}",
+            $suspension->site_id,
+            $suspension
+        );
+
         return response()->json($suspension->load(['employee', 'site']), 201);
     }
 
@@ -70,13 +78,23 @@ class SuspensionController extends Controller
         $suspension->update($data);
         AttendanceAutomation::reconcilePeriod($suspension->employee_id, $suspension->start_date->toDateString(), $suspension->end_date->toDateString());
 
+        AuditLogger::log(
+            'suspension.updated',
+            "Mise à pied modifiée — {$suspension->employee->full_name}",
+            $suspension->site_id,
+            $suspension
+        );
+
         return $suspension->load(['employee', 'site']);
     }
 
     public function destroy(Request $request, Suspension $suspension)
     {
         $this->ensureSiteAccess($request, $suspension->site_id);
+        $employeeName = $suspension->employee->full_name;
         $suspension->delete();
+
+        AuditLogger::log('suspension.deleted', "Mise à pied supprimée — {$employeeName}", $suspension->site_id, $suspension);
 
         return response()->json(['message' => 'Mise à pied supprimée.']);
     }

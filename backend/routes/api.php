@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AssignmentController;
 use App\Http\Controllers\Api\AttendanceController;
+use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CashAccountController;
 use App\Http\Controllers\Api\CashTransactionController;
@@ -112,6 +113,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/reports/sanctions/export', [ReportController::class, 'exportSanctions']);
         Route::get('/reports/movements/export', [ReportController::class, 'exportMovements']);
         Route::get('/reports/cash/export', [ReportController::class, 'exportCash']);
+
+        Route::get('/audit-logs', [AuditLogController::class, 'index']);
 
         Route::middleware('superadmin')->group(function () {
             Route::post('/sites', [SiteController::class, 'store']);

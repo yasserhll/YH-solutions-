@@ -8,6 +8,7 @@ use App\Http\Requests\StoreLeaveTakenRequest;
 use App\Models\Employee;
 use App\Models\Leave;
 use App\Services\AttendanceAutomation;
+use App\Services\AuditLogger;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -64,6 +65,13 @@ class LeaveController extends Controller
         // auto-derived "Absent - Congé" default forever on Pointage.
         AttendanceAutomation::reconcilePeriod($leave->employee_id, $leave->start_date->toDateString(), $leave->end_date->toDateString());
 
+        AuditLogger::log(
+            'leave.declared',
+            "Congé saisi — {$employee->full_name} du {$leave->start_date->format('d/m/Y')} au {$leave->end_date->format('d/m/Y')}",
+            $leave->site_id,
+            $leave
+        );
+
         return response()->json($leave->load(['employee', 'site', 'extensions']), 201);
     }
 
@@ -94,6 +102,13 @@ class LeaveController extends Controller
             ]);
             AttendanceAutomation::reconcilePeriod($leave->employee_id, $previousEndDate, $newEndDate);
 
+            AuditLogger::log(
+                'leave.extended',
+                "Congé prolongé de {$data['extra_days']} j — {$leave->employee->full_name}, nouvelle fin {$newEndDate->format('d/m/Y')}",
+                $leave->site_id,
+                $leave
+            );
+
             return $leave->load(['employee', 'site', 'extensions']);
         });
     }
@@ -107,13 +122,23 @@ class LeaveController extends Controller
         $leave->update($data);
         AttendanceAutomation::reconcilePeriod($leave->employee_id, $leave->start_date->toDateString(), $leave->end_date->toDateString());
 
+        AuditLogger::log(
+            'leave.updated',
+            "Congé modifié — {$leave->employee->full_name} du {$leave->start_date->format('d/m/Y')} au {$leave->end_date->format('d/m/Y')}",
+            $leave->site_id,
+            $leave
+        );
+
         return $leave->load(['employee', 'site', 'extensions']);
     }
 
     public function destroy(Request $request, Leave $leave)
     {
         $this->ensureSiteAccess($request, $leave->site_id);
+        $employeeName = $leave->employee->full_name;
         $leave->delete();
+
+        AuditLogger::log('leave.deleted', "Congé supprimé — {$employeeName}", $leave->site_id, $leave);
 
         return response()->json(['message' => 'Congé supprimé.']);
     }

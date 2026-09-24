@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreLeaveRequestRequest;
 use App\Models\Employee;
 use App\Models\LeaveRequest;
+use App\Services\AuditLogger;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -43,6 +44,13 @@ class LeaveRequestController extends Controller
 
         $leaveRequest = LeaveRequest::create($data);
 
+        AuditLogger::log(
+            'leave_request.created',
+            "Demande de congé créée — {$employee->full_name}",
+            $leaveRequest->site_id,
+            $leaveRequest
+        );
+
         return response()->json($leaveRequest->load(['employee', 'site']), 201);
     }
 
@@ -51,8 +59,22 @@ class LeaveRequestController extends Controller
         $this->ensureSiteAccess($request, $leaveRequest->site_id);
         $leaveRequest->update($request->validated());
 
+        AuditLogger::log(
+            'leave_request.updated',
+            "Demande de congé modifiée — {$leaveRequest->employee->full_name}",
+            $leaveRequest->site_id,
+            $leaveRequest
+        );
+
         return $leaveRequest->load(['employee', 'site']);
     }
+
+    private static array $statusLabels = [
+        'en_attente' => 'En attente',
+        'acceptee' => 'Acceptée',
+        'refusee' => 'Refusée',
+        'annulee' => 'Annulée',
+    ];
 
     public function updateStatus(Request $request, LeaveRequest $leaveRequest)
     {
@@ -63,13 +85,23 @@ class LeaveRequestController extends Controller
         ]);
         $leaveRequest->update($data);
 
+        AuditLogger::log(
+            'leave_request.status_changed',
+            "Demande de congé de {$leaveRequest->employee->full_name} → ".(self::$statusLabels[$data['status']] ?? $data['status']),
+            $leaveRequest->site_id,
+            $leaveRequest
+        );
+
         return $leaveRequest->load(['employee', 'site']);
     }
 
     public function destroy(Request $request, LeaveRequest $leaveRequest)
     {
         $this->ensureSiteAccess($request, $leaveRequest->site_id);
+        $employeeName = $leaveRequest->employee->full_name;
         $leaveRequest->delete();
+
+        AuditLogger::log('leave_request.deleted', "Demande de congé supprimée — {$employeeName}", $leaveRequest->site_id, $leaveRequest);
 
         return response()->json(['message' => 'Demande de congé supprimée.']);
     }

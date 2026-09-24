@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Assignment;
 use App\Models\Employee;
 use App\Models\Entry;
+use App\Services\AuditLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -75,6 +76,8 @@ class EntryController extends Controller
                 'created_by' => $request->user()->id,
             ]);
 
+            AuditLogger::log('entry.created', "Entrée — {$data['full_name']}", $siteId, $entry);
+
             return response()->json($entry->load(['employee', 'site', 'department', 'position']), 201);
         });
     }
@@ -108,13 +111,18 @@ class EntryController extends Controller
             ]);
         }
 
+        AuditLogger::log('entry.updated', "Entrée modifiée — {$entry->full_name}", $entry->site_id, $entry);
+
         return $entry->load(['employee', 'site', 'department', 'position']);
     }
 
     public function destroy(Request $request, Entry $entry)
     {
         $this->ensureSiteAccess($request, $entry->site_id);
+        $fullName = $entry->full_name;
         $entry->delete();
+
+        AuditLogger::log('entry.deleted', "Entrée supprimée — {$fullName}", $entry->site_id, $entry);
 
         return response()->json(['message' => 'Entrée supprimée.']);
     }

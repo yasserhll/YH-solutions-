@@ -19,6 +19,7 @@ import OvertimePage from './pages/OvertimePage';
 import CashPage from './pages/CashPage';
 import UsersPage from './pages/UsersPage';
 import ReportsPage from './pages/ReportsPage';
+import HistoriquePage from './pages/HistoriquePage';
 import SettingsPage from './pages/SettingsPage';
 import HseReportsPage from './pages/HseReportsPage';
 import HseDashboardPage from './pages/HseDashboardPage';
@@ -188,6 +189,14 @@ export default function App() {
                     element={
                       <RequireFullAccess>
                         <ReportsPage />
+                      </RequireFullAccess>
+                    }
+                  />
+                  <Route
+                    path="/historique"
+                    element={
+                      <RequireFullAccess>
+                        <HistoriquePage />
                       </RequireFullAccess>
                     }
                   />

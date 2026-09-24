@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\InteractsWithSites;
 use App\Http\Controllers\Controller;
 use App\Models\CashAccount;
 use App\Models\CashTransaction;
+use App\Services\AuditLogger;
 use App\Services\CashLedgerService;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -117,11 +118,24 @@ class CashTransactionController extends Controller
 
         $transaction = $this->ledger->create($account, $data);
 
+        AuditLogger::log(
+            'cash_transaction.created',
+            self::$typeLabels[$data['type']]." de {$data['amount']} DH".($data['beneficiary'] ?? null ? " — {$data['beneficiary']}" : ''),
+            $transaction->site_id,
+            $transaction
+        );
+
         return response()->json(
             $this->hideBalanceUnlessSuperAdmin($request, $transaction->load(['site', 'creator'])),
             201
         );
     }
+
+    private static array $typeLabels = [
+        'expense' => 'Dépense',
+        'entry' => 'Entrée',
+        'transfer' => 'Transfert',
+    ];
 
     /**
      * Editing/deleting an operation touches the balance recalculation, so it
@@ -144,6 +158,13 @@ class CashTransactionController extends Controller
 
         $transaction = $this->ledger->update($cashTransaction, $data);
 
+        AuditLogger::log(
+            'cash_transaction.updated',
+            self::$typeLabels[$transaction->type].' modifiée — '.$transaction->amount.' DH',
+            $transaction->site_id,
+            $transaction
+        );
+
         return $transaction->load(['site', 'creator']);
     }
 
@@ -153,7 +174,12 @@ class CashTransactionController extends Controller
             throw new HttpException(403, 'Réservé au SuperAdmin.');
         }
 
+        $label = self::$typeLabels[$cashTransaction->type].' supprimée — '.$cashTransaction->amount.' DH';
+        $siteId = $cashTransaction->site_id;
+
         $this->ledger->delete($cashTransaction);
+
+        AuditLogger::log('cash_transaction.deleted', $label, $siteId, $cashTransaction);
 
         return response()->json(['message' => 'Opération supprimée.']);
     }

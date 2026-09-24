@@ -11,7 +11,9 @@ class AuditLog extends Model
 
     protected $fillable = [
         'user_id',
+        'site_id',
         'action',
+        'description',
         'auditable_type',
         'auditable_id',
         'old_values',
@@ -31,5 +33,10 @@ class AuditLog extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function site(): BelongsTo
+    {
+        return $this->belongsTo(Site::class);
     }
 }
