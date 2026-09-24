@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\InteractsWithSites;
 use App\Http\Controllers\Controller;
 use App\Models\Employee;
 use App\Models\Suspension;
+use App\Services\AttendanceAutomation;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -52,6 +53,12 @@ class SuspensionController extends Controller
 
         $suspension = Suspension::create($data);
 
+        // Same reconciliation as Illness: a real Attendance row entered
+        // before this Mise à pied was declared would otherwise keep
+        // shadowing the auto-derived "Absent - Mise à pied" default forever
+        // on Pointage.
+        AttendanceAutomation::reconcilePeriod($suspension->employee_id, $suspension->start_date->toDateString(), $suspension->end_date->toDateString());
+
         return response()->json($suspension->load(['employee', 'site']), 201);
     }
 
@@ -61,6 +68,7 @@ class SuspensionController extends Controller
         $data = $request->validate($this->rules());
         $data['end_date'] = Suspension::endDateForDuration(Carbon::parse($data['start_date']), $data['duration_days']);
         $suspension->update($data);
+        AttendanceAutomation::reconcilePeriod($suspension->employee_id, $suspension->start_date->toDateString(), $suspension->end_date->toDateString());
 
         return $suspension->load(['employee', 'site']);
     }

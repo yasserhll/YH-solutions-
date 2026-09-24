@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreLeaveTakenRequest;
 use App\Models\Employee;
 use App\Models\Leave;
+use App\Services\AttendanceAutomation;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -58,6 +59,11 @@ class LeaveController extends Controller
 
         $leave = Leave::create($data);
 
+        // Same reconciliation as Illness: a real Attendance row entered
+        // before this Congé was declared would otherwise keep shadowing the
+        // auto-derived "Absent - Congé" default forever on Pointage.
+        AttendanceAutomation::reconcilePeriod($leave->employee_id, $leave->start_date->toDateString(), $leave->end_date->toDateString());
+
         return response()->json($leave->load(['employee', 'site', 'extensions']), 201);
     }
 
@@ -86,6 +92,7 @@ class LeaveController extends Controller
                 'end_date' => $newEndDate,
                 'duration_days' => $leave->duration_days + $data['extra_days'],
             ]);
+            AttendanceAutomation::reconcilePeriod($leave->employee_id, $previousEndDate, $newEndDate);
 
             return $leave->load(['employee', 'site', 'extensions']);
         });
@@ -98,6 +105,7 @@ class LeaveController extends Controller
         $data = $request->validated();
         $data['end_date'] = Leave::endDateForDuration(Carbon::parse($data['start_date']), $data['duration_days']);
         $leave->update($data);
+        AttendanceAutomation::reconcilePeriod($leave->employee_id, $leave->start_date->toDateString(), $leave->end_date->toDateString());
 
         return $leave->load(['employee', 'site', 'extensions']);
     }

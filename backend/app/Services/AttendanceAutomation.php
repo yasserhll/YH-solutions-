@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Attendance;
 use App\Models\Illness;
 use App\Models\Leave;
 use App\Models\Suspension;
@@ -68,6 +69,36 @@ class AttendanceAutomation
             });
 
         return $causes;
+    }
+
+    /**
+     * A real Attendance row always wins over the auto-derived default (see
+     * causesForDate/daily()) — that's deliberate, it's what lets a
+     * responsable correct a specific day after the fact. But that same rule
+     * turns into a bug when the conflicting row PREDATES the period: e.g. an
+     * employee is pointed "présent" on the 17th, then a Maladie covering the
+     * 17th-19th gets declared afterward — without this, Pointage keeps
+     * showing that stale "présent" forever, even though the period the
+     * responsable just declared clearly says otherwise for that date. Call
+     * this right after creating/updating/extending a period so any row it
+     * now supersedes stops shadowing it; a row a responsable enters
+     * AFTERWARDS (a deliberate, later correction) is untouched since this
+     * only runs once, at declaration time.
+     *
+     * Never touches an "stc" row: that absence cause carries a real side
+     * effect (auto-creates an Exit and flips the employee to "sorti"), which
+     * must always be undone through RevertsEmployeeDeparture, never silently
+     * deleted here.
+     */
+    public static function reconcilePeriod(int $employeeId, string $startDate, string $endDate): void
+    {
+        Attendance::where('employee_id', $employeeId)
+            ->whereDate('date', '>=', $startDate)
+            ->whereDate('date', '<=', $endDate)
+            ->where(function ($query) {
+                $query->whereNull('absence_cause')->orWhere('absence_cause', '!=', 'stc');
+            })
+            ->delete();
     }
 
     /**

@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreIllnessRequest;
 use App\Models\Employee;
 use App\Models\Illness;
+use App\Services\AttendanceAutomation;
 use Illuminate\Http\Request;
 
 /**
@@ -46,6 +47,12 @@ class IllnessController extends Controller
 
         $illness = Illness::create($data);
 
+        // A real Attendance row entered before this Maladie was declared
+        // (e.g. someone pointed "présent" on a day that turns out to be
+        // covered by the certificate) would otherwise keep shadowing the
+        // auto-derived "Absent - Maladie" default forever on Pointage.
+        AttendanceAutomation::reconcilePeriod($illness->employee_id, $illness->start_date->toDateString(), $illness->end_date->toDateString());
+
         return response()->json($illness->load(['employee', 'site']), 201);
     }
 
@@ -54,6 +61,7 @@ class IllnessController extends Controller
         $this->ensureSiteAccess($request, $illness->site_id);
 
         $illness->update($request->validated());
+        AttendanceAutomation::reconcilePeriod($illness->employee_id, $illness->start_date->toDateString(), $illness->end_date->toDateString());
 
         return $illness->load(['employee', 'site']);
     }
