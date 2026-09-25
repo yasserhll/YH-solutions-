@@ -121,7 +121,14 @@ function UserFormModal({ user, onClose }: { user: User | null; onClose: () => vo
   }
 
   const mutation = useMutation({
-    mutationFn: () => (user ? api.put(`/users/${user.id}`, form) : api.post('/users', form)),
+    // A SuperAdmin has no assigned sites — send `site_ids: []` rather than
+    // whatever was left checked from a previous role selection, so the
+    // backend never has to guess whether an empty array here was
+    // intentional.
+    mutationFn: () => {
+      const payload = { ...form, site_ids: form.role === 'superadmin' ? [] : form.site_ids };
+      return user ? api.put(`/users/${user.id}`, payload) : api.post('/users', payload);
+    },
     onSuccess: () => {
       toast.success(user ? 'Utilisateur mis à jour.' : 'Utilisateur créé.');
       queryClient.invalidateQueries({ queryKey: ['users'] });
