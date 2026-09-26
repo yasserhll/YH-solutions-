@@ -5,19 +5,32 @@ import clsx from 'clsx';
 import { Download } from 'lucide-react';
 import { api, apiErrorMessage, downloadFile } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
-import type { Attendance, CashTransaction, DisciplinaryWarning, Entry, Exit, LeaveRequest, Paginated, Suspension } from '../types';
+import type {
+  Attendance,
+  CashTransaction,
+  DisciplinaryWarning,
+  Entry,
+  Exit,
+  LeaveRequest,
+  OvertimeEntry,
+  OvertimeMonth,
+  Paginated,
+  Suspension,
+} from '../types';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Button';
 import { DataTable, type Column } from '../components/ui/DataTable';
 import { StatusBadge } from '../components/ui/StatusBadge';
+import { hoursLabel, periodLabel } from '../utils/overtime';
 
-const tabs = ['Pointage', 'Congés', 'Sanctions', 'Entrées / Sorties', 'Caisse'] as const;
+const tabs = ['Pointage', 'Congés', 'Sanctions', 'Entrées / Sorties', 'Heures sup.', 'Caisse'] as const;
 
 const exportEndpoints: Record<(typeof tabs)[number], { url: string; filename: string }> = {
   Pointage: { url: '/reports/attendance/export', filename: 'pointage.xlsx' },
   Congés: { url: '/reports/leaves/export', filename: 'conges.xlsx' },
   Sanctions: { url: '/reports/sanctions/export', filename: 'sanctions.xlsx' },
   'Entrées / Sorties': { url: '/reports/movements/export', filename: 'entrees-sorties.xlsx' },
+  'Heures sup.': { url: '/reports/overtime/export', filename: 'heures-sup.xlsx' },
   Caisse: { url: '/reports/cash/export', filename: 'caisse.xlsx' },
 };
 
@@ -62,6 +75,15 @@ export default function ReportsPage() {
     queryFn: () =>
       api.get<{ entries: Entry[]; exits: Exit[] }>('/reports/movements', { params: { ...siteParams, ...period } }).then((r) => r.data),
     enabled: tab === 'Entrées / Sorties',
+  });
+
+  const overtimeQuery = useQuery({
+    queryKey: ['report-overtime', siteParams, period],
+    queryFn: () =>
+      api
+        .get<{ entries: OvertimeEntry[]; months: OvertimeMonth[] }>('/reports/overtime', { params: { ...siteParams, ...period } })
+        .then((r) => r.data),
+    enabled: tab === 'Heures sup.',
   });
 
   const cashQuery = useQuery({
@@ -115,6 +137,24 @@ export default function ReportsPage() {
     { header: 'Nom complet', accessor: (e) => e.full_name },
     { header: 'Site', accessor: (e) => e.site?.name },
     { header: 'Département', accessor: (e) => e.department?.name ?? '—' },
+  ];
+
+  const overtimeEntryColumns: Column<OvertimeEntry>[] = [
+    { header: 'Date', accessor: (e) => new Date(e.date).toLocaleDateString('fr-FR') },
+    { header: 'Employé', accessor: (e) => e.employee?.full_name },
+    { header: 'Site', accessor: (e) => e.site?.name },
+    { header: 'Heures', accessor: (e) => hoursLabel(e.hours) },
+    { header: 'Remarque', accessor: (e) => e.remark ?? '—' },
+  ];
+
+  const overtimeMonthColumns: Column<OvertimeMonth>[] = [
+    { header: 'Période', accessor: (m) => periodLabel(m.month) },
+    { header: 'Employé', accessor: (m) => m.employee?.full_name },
+    { header: 'Site', accessor: (m) => m.site?.name },
+    { header: 'Total', accessor: (m) => hoursLabel(m.total_hours) },
+    { header: 'Jours', accessor: (m) => <span className="font-semibold">{m.days_earned}</span> },
+    { header: 'Reliquat', accessor: (m) => hoursLabel(m.remaining_hours) },
+    { header: 'Statut', accessor: (m) => <StatusBadge status={m.is_paid ? 'paye' : 'a_payer'} /> },
   ];
 
   const cashColumns: Column<CashTransaction>[] = [
@@ -204,6 +244,28 @@ export default function ReportsPage() {
                 rows={movementsQuery.data?.exits ?? []}
                 isLoading={movementsQuery.isLoading}
                 keyFn={(e) => e.id}
+              />
+            </div>
+          </div>
+        )}
+        {tab === 'Heures sup.' && (
+          <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            <div className="p-4">
+              <h3 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">Déclarations</h3>
+              <DataTable
+                columns={overtimeEntryColumns}
+                rows={overtimeQuery.data?.entries ?? []}
+                isLoading={overtimeQuery.isLoading}
+                keyFn={(e) => e.id}
+              />
+            </div>
+            <div className="p-4">
+              <h3 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">Résumé par période de paie (27 → 26)</h3>
+              <DataTable
+                columns={overtimeMonthColumns}
+                rows={overtimeQuery.data?.months ?? []}
+                isLoading={overtimeQuery.isLoading}
+                keyFn={(m) => m.id}
               />
             </div>
           </div>

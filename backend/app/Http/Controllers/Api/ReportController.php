@@ -11,10 +11,14 @@ use App\Models\Employee;
 use App\Models\Entry;
 use App\Models\EmployeeExit;
 use App\Models\LeaveRequest;
+use App\Models\OvertimeEntry;
+use App\Models\OvertimeMonth;
 use App\Models\Site;
 use App\Models\Suspension;
 use App\Services\AttendanceAutomation;
 use App\Services\ExcelExportService;
+use App\Services\OvertimePayPeriod;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -350,6 +354,103 @@ class ReportController extends Controller
             ['Mouvement', 'Date', 'Nom complet', 'Site', 'Département', 'Fonction'],
             $entryRows->concat($exitRows),
         );
+    }
+
+    protected function overtimeEntriesQuery(Request $request): Builder
+    {
+        $query = OvertimeEntry::with(['employee', 'site', 'creator']);
+        $this->scopeToSite($query, $request);
+        $this->applyPeriod($request, $query);
+
+        if ($employeeId = $request->query('employee_id')) {
+            $query->where('employee_id', $employeeId);
+        }
+        if ($search = $request->query('search')) {
+            $query->whereHas('employee', fn ($q) => $q->where('full_name', 'like', "%{$search}%"));
+        }
+
+        return $query->orderByDesc('date')->orderByDesc('id');
+    }
+
+    /**
+     * Payroll periods (27 -> 26, see OvertimePayPeriod) overlapping the
+     * requested date range — a period overlaps [from, to] exactly when its
+     * end date lies between the end of the period containing `from` and the
+     * end of the period containing `to`.
+     */
+    protected function overtimeMonthsQuery(Request $request): Builder
+    {
+        $query = OvertimeMonth::with(['employee', 'site']);
+        $this->scopeToSite($query, $request);
+
+        if ($from = $request->query('date_from')) {
+            $query->whereDate('month', '>=', OvertimePayPeriod::endForDate(Carbon::parse($from)));
+        }
+        if ($to = $request->query('date_to')) {
+            $query->whereDate('month', '<=', OvertimePayPeriod::endForDate(Carbon::parse($to)));
+        }
+        if ($employeeId = $request->query('employee_id')) {
+            $query->where('employee_id', $employeeId);
+        }
+        if ($search = $request->query('search')) {
+            $query->whereHas('employee', fn ($q) => $q->where('full_name', 'like', "%{$search}%"));
+        }
+
+        return $query->orderByDesc('month')->orderBy('employee_id');
+    }
+
+    public function overtime(Request $request)
+    {
+        return [
+            'entries' => $this->overtimeEntriesQuery($request)->get(),
+            'months' => $this->overtimeMonthsQuery($request)->get(),
+        ];
+    }
+
+    public function exportOvertime(Request $request): StreamedResponse
+    {
+        $entryRows = $this->overtimeEntriesQuery($request)->get()->map(fn (OvertimeEntry $e) => [
+            $e->date->format('d/m/Y'),
+            $e->employee?->full_name,
+            $e->site?->name,
+            (float) $e->hours,
+            $this->payPeriodLabel(OvertimePayPeriod::endForDate($e->date)),
+            $e->remark,
+            $e->creator?->name,
+        ]);
+
+        $monthRows = $this->overtimeMonthsQuery($request)->get()->map(fn (OvertimeMonth $m) => [
+            $this->payPeriodLabel($m->month),
+            $m->employee?->full_name,
+            $m->site?->name,
+            (float) $m->carried_hours,
+            (float) $m->declared_hours,
+            (float) $m->total_hours,
+            (int) $m->days_earned,
+            (float) $m->remaining_hours,
+            $m->is_paid ? 'Payé' : 'À payer',
+        ]);
+
+        return $this->excel->streamSheets("heures-sup-{$this->exportSiteLabel($request)}.xlsx", [
+            [
+                'title' => 'Déclarations',
+                'headers' => ['Date', 'Employé', 'Site', 'Heures', 'Période de paie', 'Remarque', 'Déclaré par'],
+                'rows' => $entryRows,
+            ],
+            [
+                'title' => 'Résumé par période',
+                'headers' => ['Période de paie', 'Employé', 'Site', 'Reportées (h)', 'Nouvelles (h)', 'Total (h)', 'Jours gagnés', 'Reliquat (h)', 'Statut'],
+                'rows' => $monthRows,
+                // Earned days still owed stand out from already-paid periods.
+                'highlight' => fn (array $row) => $row[8] === 'À payer' && $row[6] > 0,
+            ],
+        ]);
+    }
+
+    /** "27/08/2026 - 26/09/2026" for the payroll period ending on $periodEnd. */
+    protected function payPeriodLabel(Carbon $periodEnd): string
+    {
+        return OvertimePayPeriod::startForEnd($periodEnd)->format('d/m/Y').' - '.$periodEnd->format('d/m/Y');
     }
 
     protected function cashQuery(Request $request): Builder

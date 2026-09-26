@@ -33,9 +33,44 @@ class ExcelExportService
      */
     public function stream(string $filename, array $headers, iterable $rows, ?callable $highlightRow = null): StreamedResponse
     {
-        $spreadsheet = new Spreadsheet();
-        $sheet = $spreadsheet->getActiveSheet();
+        return $this->streamSheets($filename, [
+            ['title' => null, 'headers' => $headers, 'rows' => $rows, 'highlight' => $highlightRow],
+        ]);
+    }
 
+    /**
+     * Same table styling as stream(), but one worksheet (tab) per entry —
+     * for a report that naturally has two related tables (e.g. overtime
+     * declarations + the per-period summary derived from them).
+     *
+     * @param  array<int, array{title: ?string, headers: string[], rows: iterable<array<int, mixed>>, highlight?: ?callable}>  $sheets
+     */
+    public function streamSheets(string $filename, array $sheets): StreamedResponse
+    {
+        $spreadsheet = new Spreadsheet();
+
+        foreach (array_values($sheets) as $index => $definition) {
+            $sheet = $index === 0 ? $spreadsheet->getActiveSheet() : $spreadsheet->createSheet();
+            if (! empty($definition['title'])) {
+                $sheet->setTitle(mb_substr($definition['title'], 0, 31));
+            }
+            $this->fillTable($sheet, $definition['headers'], $definition['rows'], $definition['highlight'] ?? null);
+        }
+        $spreadsheet->setActiveSheetIndex(0);
+
+        $writer = new Xlsx($spreadsheet);
+
+        return new StreamedResponse(function () use ($writer) {
+            $writer->save('php://output');
+        }, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, private',
+        ]);
+    }
+
+    private function fillTable(Worksheet $sheet, array $headers, iterable $rows, ?callable $highlightRow): void
+    {
         $sheet->fromArray($headers, null, 'A1');
 
         $rowNumber = 2;
@@ -64,19 +99,12 @@ class ExcelExportService
         $headerStyle->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB(self::HEADER_FILL);
         $headerStyle->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
+        // Header stays visible while scrolling a long export.
+        $sheet->freezePane('A2');
+
         foreach (range('A', $lastColumn) as $column) {
             $sheet->getColumnDimension($column)->setAutoSize(true);
         }
-
-        $writer = new Xlsx($spreadsheet);
-
-        return new StreamedResponse(function () use ($writer) {
-            $writer->save('php://output');
-        }, 200, [
-            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
-            'Cache-Control' => 'no-store, no-cache, must-revalidate, private',
-        ]);
     }
 
     /**

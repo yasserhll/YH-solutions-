@@ -107,12 +107,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/reports/sanctions', [ReportController::class, 'sanctions']);
         Route::get('/reports/movements', [ReportController::class, 'movements']);
         Route::get('/reports/cash', [ReportController::class, 'cash']);
+        Route::get('/reports/overtime', [ReportController::class, 'overtime']);
 
         Route::get('/reports/attendance/export', [ReportController::class, 'exportAttendance']);
         Route::get('/reports/leaves/export', [ReportController::class, 'exportLeaves']);
         Route::get('/reports/sanctions/export', [ReportController::class, 'exportSanctions']);
         Route::get('/reports/movements/export', [ReportController::class, 'exportMovements']);
         Route::get('/reports/cash/export', [ReportController::class, 'exportCash']);
+        Route::get('/reports/overtime/export', [ReportController::class, 'exportOvertime']);
 
         Route::get('/audit-logs', [AuditLogController::class, 'index']);
 
