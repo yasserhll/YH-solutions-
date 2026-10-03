@@ -83,6 +83,7 @@ function InfoTab({ employee }: { employee: Employee }) {
   return (
     <div className="max-w-xl rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
       <InfoRow label="Nom complet" value={employee.full_name} />
+      <InfoRow label="Matricule" value={employee.matricule ?? '—'} />
       <InfoRow label="Site" value={employee.site?.name ?? '—'} />
       <InfoRow label="Département" value={employee.department?.name ?? '—'} />
       <InfoRow label="Fonction" value={employee.position?.name ?? '—'} />

@@ -110,6 +110,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/reports/overtime', [ReportController::class, 'overtime']);
 
         Route::get('/reports/attendance/export', [ReportController::class, 'exportAttendance']);
+        Route::get('/reports/attendance/recap-export', [ReportController::class, 'exportAttendanceRecap']);
         Route::get('/reports/leaves/export', [ReportController::class, 'exportLeaves']);
         Route::get('/reports/sanctions/export', [ReportController::class, 'exportSanctions']);
         Route::get('/reports/movements/export', [ReportController::class, 'exportMovements']);

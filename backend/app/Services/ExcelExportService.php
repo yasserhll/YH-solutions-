@@ -217,6 +217,73 @@ class ExcelExportService
         ]);
     }
 
+    /**
+     * Replica of the company's "Tableau récapitulatif des absences" template
+     * (one sheet per month, named "MM-YYYY"): navy title bar merged over
+     * C2:F2, red bold headers on row 4, data from row 5 starting in column B,
+     * a bold Total row, hair borders, no gridlines, Calibri 11 — values and
+     * column widths copied from the reference .xlsx, not eyeballed.
+     *
+     * @param  array<int, array{matricule: ?string, name: string, days: int, justified: string, observation: string}>  $rows
+     */
+    public function streamAbsenceRecap(string $filename, string $periodLabel, array $rows): StreamedResponse
+    {
+        $spreadsheet = new Spreadsheet();
+        $spreadsheet->getDefaultStyle()->getFont()->setName('Calibri')->setSize(11);
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle($periodLabel);
+        $sheet->setShowGridlines(false);
+
+        foreach (['B' => 13.5546875, 'C' => 13.5546875, 'D' => 17.21875, 'E' => 24.33203125, 'F' => 16.88671875, 'G' => 29.6640625] as $column => $width) {
+            $sheet->getColumnDimension($column)->setWidth($width);
+        }
+
+        $sheet->setCellValue('C2', "Tableau récapitulatif des absences {$periodLabel}");
+        $sheet->mergeCells('C2:F2');
+        $sheet->getRowDimension(2)->setRowHeight(15.6);
+        $title = $sheet->getStyle('C2:F2');
+        $title->getFont()->setBold(true)->setSize(12)->setColor(new Color('FFFFFFFF'));
+        $title->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FF203864');
+        $title->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+        $sheet->fromArray(['N°', 'Matricule', 'Salarié', 'Nombre de jours d’absence', 'Absences justifiées', 'Observation'], null, 'B4');
+        $header = $sheet->getStyle('B4:G4');
+        $header->getFont()->setBold(true)->setColor(new Color('FFFF0000'));
+        $header->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+        $row = 5;
+        $total = 0;
+        foreach (array_values($rows) as $index => $line) {
+            $sheet->setCellValue("B{$row}", $index + 1);
+            $sheet->setCellValueExplicit("C{$row}", (string) ($line['matricule'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValue("D{$row}", $line['name']);
+            $sheet->setCellValue("E{$row}", $line['days']);
+            $sheet->setCellValue("F{$row}", $line['justified']);
+            $sheet->setCellValue("G{$row}", $line['observation']);
+            $total += $line['days'];
+            $row++;
+        }
+
+        $sheet->setCellValue("B{$row}", 'Total');
+        $sheet->setCellValue("E{$row}", $total);
+        $sheet->setCellValue("F{$row}", '-');
+        $sheet->getStyle("B{$row}:G{$row}")->getFont()->setBold(true);
+
+        $sheet->getStyle("B4:G{$row}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_HAIR);
+        $sheet->getStyle("D5:D{$row}")->getAlignment()->setWrapText(true);
+        $sheet->getStyle("G5:G{$row}")->getAlignment()->setWrapText(true);
+
+        $writer = new Xlsx($spreadsheet);
+
+        return new StreamedResponse(function () use ($writer) {
+            $writer->save('php://output');
+        }, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, private',
+        ]);
+    }
+
     private function styleFormLabel(Worksheet $sheet, string $cell, ?string $fill): void
     {
         $sheet->getStyle($cell)->getFont()->setBold(true);

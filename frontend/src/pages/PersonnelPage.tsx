@@ -142,6 +142,7 @@ function EmployeeFormModal({ employee, isSuperAdmin, onClose }: { employee: Empl
 
   const [form, setForm] = useState({
     full_name: employee?.full_name ?? '',
+    matricule: employee?.matricule ?? '',
     site_id: employee?.site_id ?? '',
     department_id: employee?.department_id ?? '',
     position_id: employee?.position_id ?? '',
@@ -170,7 +171,12 @@ function EmployeeFormModal({ employee, isSuperAdmin, onClose }: { employee: Empl
         }}
         className="space-y-4"
       >
-        <TextField label="Nom complet" required value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="sm:col-span-2">
+            <TextField label="Nom complet" required value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} />
+          </div>
+          <TextField label="Matricule" value={form.matricule} onChange={(e) => setForm({ ...form, matricule: e.target.value })} />
+        </div>
         {showSiteSelect && (
           <SelectField label="Site" required value={form.site_id} onChange={(e) => setForm({ ...form, site_id: e.target.value })}>
             <option value="">Sélectionner...</option>

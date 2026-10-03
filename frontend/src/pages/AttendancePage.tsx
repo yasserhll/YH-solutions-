@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { UserX, Pencil, Download, CalendarOff, Trash2, X } from 'lucide-react';
+import { UserX, Pencil, Download, CalendarOff, Trash2, X, FileSpreadsheet } from 'lucide-react';
 import { api, apiErrorMessage, downloadFile } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
 import type { AbsenceCause, DailyAttendanceRow, DailyAttendanceSheet, Employee, Illness, Paginated } from '../types';
@@ -71,6 +71,14 @@ export default function AttendancePage() {
   const exportMutation = useMutation({
     mutationFn: () =>
       downloadFile('/reports/attendance/export', { ...siteParams, date_from: date, date_to: date, search: search || undefined, status: statusFilter || undefined }, 'pointage.xlsx'),
+    onError: (err) => toast.error(apiErrorMessage(err, "Échec de l'export.")),
+  });
+
+  // Monthly "Tableau récapitulatif des absences" (company template) — a
+  // calendar month, independent of the day currently open in the sheet.
+  const [recapMonth, setRecapMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const recapExportMutation = useMutation({
+    mutationFn: () => downloadFile('/reports/attendance/recap-export', { ...siteParams, month: recapMonth }, `recap-absences-${recapMonth}.xlsx`),
     onError: (err) => toast.error(apiErrorMessage(err, "Échec de l'export.")),
   });
 
@@ -188,6 +196,18 @@ export default function AttendancePage() {
           <Button variant="secondary" onClick={() => exportMutation.mutate()} disabled={exportMutation.isPending}>
             <Download size={16} /> {exportMutation.isPending ? 'Export en cours...' : 'Export Excel'}
           </Button>
+          <div className="flex items-center gap-2">
+            <input
+              type="month"
+              value={recapMonth}
+              onChange={(e) => setRecapMonth(e.target.value)}
+              title="Mois du récapitulatif des absences"
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+            />
+            <Button variant="secondary" onClick={() => recapExportMutation.mutate()} disabled={!recapMonth || recapExportMutation.isPending}>
+              <FileSpreadsheet size={16} /> {recapExportMutation.isPending ? 'Export en cours...' : 'Récap absences'}
+            </Button>
+          </div>
           {dayType !== 'holiday' && (
             <Button variant="secondary" onClick={() => setShowHolidayForm(true)}>
               <CalendarOff size={16} /> Déclarer jour férié

@@ -10,6 +10,7 @@ use App\Models\DisciplinaryWarning;
 use App\Models\Employee;
 use App\Models\Entry;
 use App\Models\EmployeeExit;
+use App\Models\Holiday;
 use App\Models\LeaveRequest;
 use App\Models\OvertimeEntry;
 use App\Models\OvertimeMonth;
@@ -190,6 +191,70 @@ class ReportController extends Controller
         return $this->excel->stream(
             "pointage-{$this->exportSiteLabel($request)}.xlsx",
             ['Date', 'Employé', 'Site', 'Statut', 'Cause', 'Description'],
+            $rows,
+        );
+    }
+
+    /**
+     * Monthly "Tableau récapitulatif des absences" (the company's own
+     * template, see ExcelExportService::streamAbsenceRecap): one line per
+     * employee with at least one absence day in the calendar month. Built on
+     * attendanceRows() so it counts exactly what Pointage/Rapports show —
+     * real rows plus the auto-derived Maladie/Congé/Mise à pied days, same
+     * site-scoping — then keeps only real working days: Sundays and declared
+     * holidays are not absences, and an STC day is a departure, not an
+     * absence. Justified = every cause except non_autorisee (user's rule);
+     * Observation = the descriptions typed for those days.
+     */
+    public function exportAttendanceRecap(Request $request): StreamedResponse
+    {
+        $request->validate(['month' => ['required', 'date_format:Y-m']]);
+
+        $start = Carbon::createFromFormat('Y-m-d', $request->query('month').'-01')->startOfDay();
+        $end = $start->copy()->endOfMonth();
+
+        $request->query->set('date_from', $start->toDateString());
+        $request->query->set('date_to', $end->toDateString());
+        $request->query->set('status', 'absent');
+        $request->query->remove('absence_cause');
+
+        $holidays = Holiday::whereDate('date', '>=', $start)->whereDate('date', '<=', $end)
+            ->pluck('date')
+            ->map(fn ($d) => Carbon::parse($d)->toDateString())
+            ->all();
+
+        $absences = $this->attendanceRows($request)
+            ->filter(fn (array $r) => $r['absence_cause'] !== 'stc'
+                && ! Carbon::parse($r['date'])->isSunday()
+                && ! in_array($r['date'], $holidays, true))
+            ->groupBy(fn (array $r) => $r['employee']['id']);
+
+        $employees = Employee::withTrashed()->whereIn('id', $absences->keys())->get()->keyBy('id');
+
+        $rows = $absences->map(function (Collection $days, $employeeId) use ($employees) {
+            $employee = $employees->get($employeeId);
+            $unjustified = $days->where('absence_cause', 'non_autorisee')->count();
+            $justified = $days->count() - $unjustified;
+
+            return [
+                'matricule' => $employee?->matricule,
+                'name' => $employee?->full_name ?? $days->first()['employee']['full_name'],
+                'days' => $days->count(),
+                'justified' => match (true) {
+                    $unjustified === 0 => 'Oui',
+                    $justified === 0 => 'Non',
+                    default => "Oui ({$justified} j) / Non ({$unjustified} j)",
+                },
+                'observation' => $days->sortBy('date')->pluck('description')
+                    ->map(fn ($d) => trim((string) $d))->filter()->unique()->implode(' ; '),
+            ];
+        })->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)->values()->all();
+
+        $periodLabel = $start->format('m-Y');
+
+        return $this->excel->streamAbsenceRecap(
+            "recap-absences-{$this->exportSiteLabel($request)}-{$periodLabel}.xlsx",
+            $periodLabel,
             $rows,
         );
     }

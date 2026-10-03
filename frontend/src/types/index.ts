@@ -49,6 +49,7 @@ export type EmployeeStatus = 'actif' | 'sorti';
 export interface Employee {
   id: number;
   full_name: string;
+  matricule: string | null;
   site_id: number;
   department_id: number | null;
   position_id: number | null;
