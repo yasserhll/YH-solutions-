@@ -25,7 +25,11 @@ class FuelReportService
     /** Same "camion or engin" filter everywhere in the report. */
     public const SCOPE_SQL = "(m.vehicle_code LIKE 'D%' OR m.vehicle_code LIKE 'E%')";
 
-    public function build(int $siteId, string $date): array
+    /**
+     * $assignedOnly: a site responsable only sees the camions/engins listed in
+     * the site's affectation (user's rule); a SuperAdmin sees every D/E code.
+     */
+    public function build(int $siteId, string $date, bool $assignedOnly = false): array
     {
         $refuels = DB::table('fuel_movements as m')
             ->join('fuel_tanks as t', 't.id', '=', 'm.fuel_tank_id')
@@ -33,7 +37,7 @@ class FuelReportService
             ->where('m.site_id', $siteId)
             ->where('m.type', 'exit')
             ->where('m.date', $date)
-            ->whereRaw(self::SCOPE_SQL)
+            ->tap(fn ($q) => $this->scope($q, $siteId, $assignedOnly))
             ->orderBy('m.time')->orderBy('m.id')
             ->get(['m.id', 'm.time', 'm.vehicle_code', 'm.quantity', 'm.odometer', 'm.distance', 'm.consumption', 'm.remark', 't.name as tank', 'v.matricule', 'v.unit']);
 
@@ -74,23 +78,23 @@ class FuelReportService
             'camions' => $camions,
             'engins' => $engins,
             'totals' => ['camions' => $sum($camions), 'engins' => $sum($engins), 'all' => $sum($vehicles)],
-            'prev_date' => $this->neighbourDate($siteId, $date, '<'),
-            'next_date' => $this->neighbourDate($siteId, $date, '>'),
+            'prev_date' => $this->neighbourDate($siteId, $date, '<', $assignedOnly),
+            'next_date' => $this->neighbourDate($siteId, $date, '>', $assignedOnly),
         ];
     }
 
     /** Most recent day (on or before today) with a camion/engin refuel, to open the report on. */
-    public function latestDate(int $siteId): ?string
+    public function latestDate(int $siteId, bool $assignedOnly = false): ?string
     {
         return DB::table('fuel_movements as m')->where('m.site_id', $siteId)->where('m.type', 'exit')
-            ->whereRaw(self::SCOPE_SQL)->where('m.date', '<=', now()->toDateString())->max('m.date');
+            ->tap(fn ($q) => $this->scope($q, $siteId, $assignedOnly))->where('m.date', '<=', now()->toDateString())->max('m.date');
     }
 
     /** @return array<int, string> every day of a month (YYYY-MM) that has a report */
-    public function datesInMonth(int $siteId, string $month): array
+    public function datesInMonth(int $siteId, string $month, bool $assignedOnly = false): array
     {
         return DB::table('fuel_movements as m')->where('m.site_id', $siteId)->where('m.type', 'exit')
-            ->whereRaw(self::SCOPE_SQL)
+            ->tap(fn ($q) => $this->scope($q, $siteId, $assignedOnly))
             ->whereBetween('m.date', ["{$month}-01", date('Y-m-t', strtotime("{$month}-01"))])
             ->distinct()->orderBy('m.date')->pluck('m.date')->map(fn ($d) => substr((string) $d, 0, 10))->all();
     }
@@ -132,12 +136,22 @@ class FuelReportService
             ->pluck('l.activity', 'l.vehicle_code')->all();
     }
 
-    protected function neighbourDate(int $siteId, string $date, string $operator): ?string
+    protected function neighbourDate(int $siteId, string $date, string $operator, bool $assignedOnly = false): ?string
     {
         $query = DB::table('fuel_movements as m')->where('m.site_id', $siteId)->where('m.type', 'exit')
-            ->whereRaw(self::SCOPE_SQL)->where('m.date', $operator, $date);
+            ->tap(fn ($q) => $this->scope($q, $siteId, $assignedOnly))->where('m.date', $operator, $date);
         $value = $operator === '<' ? $query->max('m.date') : $query->min('m.date');
 
         return $value ? substr((string) $value, 0, 10) : null;
+    }
+
+    /** Camions/engins only — and, for a site responsable, only those in the site's affectation. */
+    protected function scope($query, int $siteId, bool $assignedOnly): void
+    {
+        $query->whereRaw(self::SCOPE_SQL);
+        if ($assignedOnly) {
+            $query->whereExists(fn ($q) => $q->from('fuel_assignments as a')
+                ->whereColumn('a.code', 'm.vehicle_code')->where('a.site_id', $siteId));
+        }
     }
 }

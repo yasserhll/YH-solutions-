@@ -203,6 +203,7 @@ Frontend: `OvertimeMonthController` and `OvertimeEntryController` sit alongside 
 
   It was verified to match the original: 27/08/2026 Louta → camions 5 207 L, engins 8 758 L, total 13 965 L.
   - **Drivers** come from the site's affectation (`fuel_assignments`, "LISTE D'AFFECTATION").
+  - **A site responsable only sees the affectation's vehicles** (user's rule): for any non-SuperAdmin, `FuelReportController::assignedOnly()` makes `build`/`latestDate`/`datesInMonth` keep only D/E codes present in that site's `fuel_assignments` — screen and export alike (`assigned_only` in the response). A SuperAdmin still sees every camion/engin, unassigned ones tagged "Sans affectation". A site with no affectation therefore shows an empty report to its responsable.
   - **Per-day hand edits** (a replacement driver, the activité) are stored in `fuel_report_lines`, unique on site + date + code.
   - **Activité** is not in any import. It is typed per day; when missing, the vehicle's last typed activité carries forward, then the affectation's default.
   - **Export** (`ExcelExportService::streamFuelDailyReports`) replicates the original layout: one sheet per day named "dd-mm", fonts and widths, theme colours resolved to RGB (navy `0B1E31`, green `B4E5A2`, `FFC000`/`FF0000` totals), merged cells for a vehicle refuelled twice, and `CP` when no counter. It is available for one day (`?date=`) or a whole month (`?month=`).

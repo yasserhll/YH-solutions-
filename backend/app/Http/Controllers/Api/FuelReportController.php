@@ -33,7 +33,8 @@ class FuelReportController extends Controller
     {
         $request->validate(['date' => ['nullable', 'date_format:Y-m-d']]);
         $siteId = $this->singleSiteId($request);
-        $lastDate = $this->reports->latestDate($siteId);
+        $assignedOnly = $this->assignedOnly($request);
+        $lastDate = $this->reports->latestDate($siteId, $assignedOnly);
         $date = $request->query('date') ?: ($lastDate ?? now()->toDateString());
 
         return response()->json([
@@ -42,7 +43,8 @@ class FuelReportController extends Controller
             // simply not imported yet (shown as a hint, never a limit).
             'last_date' => $lastDate,
             'assignments_count' => FuelAssignment::where('site_id', $siteId)->count(),
-            ...$this->reports->build($siteId, $date),
+            'assigned_only' => $assignedOnly,
+            ...$this->reports->build($siteId, $date, $assignedOnly),
         ]);
     }
 
@@ -78,13 +80,20 @@ class FuelReportController extends Controller
         $siteId = $this->singleSiteId($request);
         $site = Site::findOrFail($siteId);
 
-        $dates = $request->filled('month') ? $this->reports->datesInMonth($siteId, $request->query('month')) : [$request->query('date')];
+        $assignedOnly = $this->assignedOnly($request);
+        $dates = $request->filled('month') ? $this->reports->datesInMonth($siteId, $request->query('month'), $assignedOnly) : [$request->query('date')];
         abort_if(! $dates, 422, 'Aucun plein de camion ou d\'engin sur ce mois.');
 
-        $reports = array_map(fn ($date) => $this->reports->build($siteId, $date), $dates);
+        $reports = array_map(fn ($date) => $this->reports->build($siteId, $date, $assignedOnly), $dates);
         $suffix = $request->filled('month') ? Carbon::parse($request->query('month').'-01')->format('m-Y') : Carbon::parse($dates[0])->format('d-m-Y');
 
         return $excel->streamFuelDailyReports('rapport-gsl-'.str($site->name)->slug().'-'.$suffix.'.xlsx', $site->name, $reports);
+    }
+
+    /** A site responsable's report only lists the vehicles of the site's affectation; a SuperAdmin sees every camion/engin. */
+    protected function assignedOnly(Request $request): bool
+    {
+        return ! $request->user()->isSuperAdmin();
     }
 
     // ------------------------------------------------------------ affectation

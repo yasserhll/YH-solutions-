@@ -542,6 +542,8 @@ export interface FuelDailyReport {
   /** Last day covered by the imported citerne files. */
   last_date: string | null;
   assignments_count: number;
+  /** True for a site responsable: only the affectation's camions/engins are listed. */
+  assigned_only: boolean;
   camions: FuelReportVehicle[];
   engins: FuelReportVehicle[];
   totals: { camions: number; engins: number; all: number };

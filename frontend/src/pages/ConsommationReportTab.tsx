@@ -193,14 +193,18 @@ function DailyReport({
 
       <p className="flex items-center gap-2 px-1 text-xs text-slate-500 animate-fade-up dark:text-slate-400">
         <Sparkles size={13} className="shrink-0 text-orange-500" />
-        Généré automatiquement depuis le Global de ce site (camions D… et engins E…) : litres, heures et % viennent du Global, et toute correction faite
-        dans le Global s'applique ici. Seuls les chauffeurs et l'activité se saisissent dans le rapport.
+        Généré automatiquement depuis le Global de ce site (camions D… et engins E…{data.assigned_only ? " présents dans l'affectation" : ''}) : litres, heures et %
+        viennent du Global, et toute correction faite dans le Global s'applique ici. Seuls les chauffeurs et l'activité se saisissent dans le rapport.
       </p>
 
       {data.assignments_count === 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 animate-fade-up dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
           <AlertCircle size={18} className="shrink-0" />
-          <span className="flex-1">Aucune affectation pour ce site : les chauffeurs ne peuvent pas être remplis automatiquement.</span>
+          <span className="flex-1">
+            {data.assigned_only
+              ? "Aucune affectation pour ce site : le rapport n'affiche que les camions et engins de l'affectation, importez-la pour le remplir."
+              : 'Aucune affectation pour ce site : les chauffeurs ne peuvent pas être remplis automatiquement.'}
+          </span>
           <Button size="sm" onClick={onOpenAssignments}>
             <Upload size={14} /> Importer l'affectation
           </Button>
