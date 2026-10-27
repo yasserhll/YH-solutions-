@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Concerns\ReceivesExcelUpload;
 use App\Http\Controllers\Controller;
 use App\Models\FuelVehicle;
 use App\Services\AuditLogger;
@@ -20,6 +21,8 @@ use Illuminate\Validation\Rule;
  */
 class FuelVehicleController extends Controller
 {
+    use ReceivesExcelUpload;
+
     public function index(Request $request)
     {
         $query = FuelVehicle::query()->orderBy('code');
@@ -83,8 +86,7 @@ class FuelVehicleController extends Controller
 
     public function import(Request $request, FuelImportService $importer)
     {
-        $request->validate(['file' => ['required', 'file', 'mimes:xlsx', 'max:40960']]);
-        $file = $request->file('file');
+        $file = $this->excelUpload($request);
 
         $result = $importer->importVehicles($file->getRealPath(), $file->getClientOriginalName());
         AuditLogger::log('fuel.vehicles_imported', "Matriculation importée depuis {$file->getClientOriginalName()} ({$result['created']} ajoutés, {$result['updated']} mis à jour)", null, new FuelVehicle());

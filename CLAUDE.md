@@ -216,6 +216,26 @@ Frontend: `OvertimeMonthController` and `OvertimeEntryController` sit alongside 
 - **The Global is always ONE site, never several mixed** (user's explicit rule: one global per site, made of all that site's citernes). `ResolvesSingleSite::singleSiteId()` takes `?site_id=` (checked by `ensureSiteAccess`) or a single-site responsable's own site, and 422s otherwise — there is no "Tous" global. The Global tab shows its own site pills (with each site's citerne count) for a SuperAdmin / multi-site responsable, following the top-bar switcher when it points at a site and otherwise defaulting to the first site that has citernes. The export filename is `global-<site>.xlsx`.
 - Site-scoping: tanks/movements/global go through `InteractsWithSites` (`resolveSiteId` on import — a SuperAdmin or multi-site responsable picks the site in the dropzone). Audit actions are `fuel.*`.
 
+#### Deploying Consommation on a server: upload limits, and never a destructive migrate
+
+A server deploy once showed only some citernes imported and an empty affectation. Server defaults reject large uploads before Laravel sees them:
+- PHP `upload_max_filesize` is 2 Mo by default, and `mobile 1.xlsx` alone is 2.3 Mo.
+- nginx `client_max_body_size` is 1 Mo by default.
+- In production (`APP_DEBUG=false`) a crash only says "Server Error".
+
+Hence:
+- **Shared upload helper:** every import goes through `Concerns\ReceivesExcelUpload::excelUpload()`. It raises time/memory for the request, names the exact PHP limit hit, checks for the `zip`/`xmlreader` extensions, and validates the `.xlsx` extension rather than the libmagic MIME type.
+- **Reader errors:** `XlsxStreamReader` throws 422 `HttpException`s, never a bare `RuntimeException`.
+- **Frontend messages:** `uploadErrorMessage()` (`api/client.ts`) explains 413 / timeouts / 500.
+- **Diagnostic command:** `php artisan consommation:diagnostic [--citerne=path] [--affectation=path]` is a READ-ONLY check. It covers extensions, limits, which fuel migrations ran, data per site, and a dry-run parse of a file that writes nothing.
+
+**A citerne vs its lines' site:** the Global groups by `fuel_movements.site_id`, but the citerne list used to filter on `fuel_tanks.site_id`. On a server the two disagreed, so the Global showed 4 citernes while the Citernes tab listed 2.
+- `FuelTankController@index` now lists a citerne when either its own site or its lines' site is in scope, and returns `line_sites` when they differ; the card shows a red badge.
+- `consommation:diagnostic` prints the citerne → site / lines → site table.
+- `--reparer-sites` re-attaches such a citerne to its lines' site. It asks for confirmation and touches only `fuel_tanks.site_id`.
+
+On a server holding real data, only ever run `php artisan migrate --force`, which only adds what is missing. The three fuel migrations only create tables/columns plus a fingerprint backfill on `fuel_movements`. Never run `migrate:fresh`/`migrate:refresh`/`db:seed`: they wipe everyone's data.
+
 ### HSE module: two roles restricted to ONLY this module, nothing else
 
 `hse` files the daily "RAPPORT JOURNALIER HSE" (réf. RJ-HSE-TRP-02 — the paper form this mirrors field for field, see `App\Models\HseReport`/`HseReportController`); `responsable_hse` reviews/controls every report on their assigned site(s); a SuperAdmin sees everything, unrestricted, same as always. This is a genuinely separate axis from the site-scoping rule above — it's not just "which sites can you see," it's "can you see this module at all":

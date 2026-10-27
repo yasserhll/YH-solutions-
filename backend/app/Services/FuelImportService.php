@@ -202,6 +202,30 @@ class FuelImportService
      */
     public function importAssignments(string $path, string $filename, int $siteId): array
     {
+        $byCode = array_map(fn ($row) => ['site_id' => $siteId] + $row, $this->parseAssignments($path, $filename));
+
+        $existing = DB::table('fuel_assignments')->where('site_id', $siteId)->pluck('code')->flip();
+        $created = count(array_diff_key($byCode, $existing->all()));
+        $now = now();
+
+        DB::table('fuel_assignments')->upsert(
+            array_map(fn ($row) => $row + ['created_at' => $now, 'updated_at' => $now], array_values($byCode)),
+            ['site_id', 'code'],
+            // A default activité typed by hand isn't in the file: keep it.
+            ['label', 'category', 'driver_1', 'driver_2', 'replacements', 'sort_order', 'updated_at']
+        );
+
+        return ['created' => $created, 'updated' => count($byCode) - $created, 'total' => count($byCode)];
+    }
+
+    /**
+     * Reads an affectation workbook without writing anything (also used by
+     * `php artisan consommation:diagnostic --affectation=...`).
+     *
+     * @return array<string, array<string, mixed>> code => assignment row (without site_id)
+     */
+    public function parseAssignments(string $path, string $filename): array
+    {
         $reader = new XlsxStreamReader($path);
         $byCode = [];
 
@@ -239,7 +263,6 @@ class FuelImportService
                 );
 
                 $byCode[$code] = [
-                    'site_id' => $siteId,
                     'code' => $code,
                     'label' => mb_substr(trim(preg_replace('/\s+/', ' ', $texts[$codeIndex])), 0, 80),
                     'category' => $section ?? (str_starts_with($code, 'E') ? 'engin' : 'camion'),
@@ -258,18 +281,25 @@ class FuelImportService
             throw new HttpException(422, "Aucune affectation reconnue dans « {$filename} » (codes D… / E… introuvables).");
         }
 
-        $existing = DB::table('fuel_assignments')->where('site_id', $siteId)->pluck('code')->flip();
-        $created = count(array_diff_key($byCode, $existing->all()));
-        $now = now();
+        return $byCode;
+    }
 
-        DB::table('fuel_assignments')->upsert(
-            array_map(fn ($row) => $row + ['created_at' => $now, 'updated_at' => $now], array_values($byCode)),
-            ['site_id', 'code'],
-            // A default activité typed by hand isn't in the file: keep it.
-            ['label', 'category', 'driver_1', 'driver_2', 'replacements', 'sort_order', 'updated_at']
-        );
+    /**
+     * Reads a citerne workbook without writing anything: one entry per sheet,
+     * recognised or not (used by `php artisan consommation:diagnostic`).
+     *
+     * @return array<string, array<string, mixed>|null> sheet name => stats, null = not a citerne sheet
+     */
+    public function inspectTanks(string $path): array
+    {
+        $reader = new XlsxStreamReader($path);
+        $sheets = [];
+        foreach ($reader->sheets() as $sheetName => $sheetPath) {
+            $result = $this->parseTankSheet($reader, $sheetPath);
+            $sheets[trim($sheetName)] = $result === null ? null : array_diff_key($result, ['rows' => true]);
+        }
 
-        return ['created' => $created, 'updated' => count($byCode) - $created, 'total' => count($byCode)];
+        return $sheets;
     }
 
     /** "EL MAJDOULI  BRAHIM" -> "EL MAJDOULI BRAHIM"; "-" means nobody. */

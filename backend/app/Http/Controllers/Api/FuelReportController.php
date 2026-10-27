@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\InteractsWithSites;
+use App\Http\Controllers\Concerns\ReceivesExcelUpload;
 use App\Http\Controllers\Concerns\ResolvesSingleSite;
 use App\Http\Controllers\Controller;
 use App\Models\FuelAssignment;
@@ -24,7 +25,7 @@ use Illuminate\Validation\Rule;
  */
 class FuelReportController extends Controller
 {
-    use InteractsWithSites, ResolvesSingleSite;
+    use InteractsWithSites, ReceivesExcelUpload, ResolvesSingleSite;
 
     public function __construct(protected FuelReportService $reports) {}
 
@@ -129,9 +130,8 @@ class FuelReportController extends Controller
 
     public function importAssignments(Request $request, FuelImportService $importer)
     {
-        $request->validate(['file' => ['required', 'file', 'mimes:xlsx', 'max:20480']]);
+        $file = $this->excelUpload($request);
         $siteId = $this->singleSiteId($request);
-        $file = $request->file('file');
 
         $result = $importer->importAssignments($file->getRealPath(), $file->getClientOriginalName(), $siteId);
         AuditLogger::log('fuel.assignments_imported', "Affectation importée depuis {$file->getClientOriginalName()} ({$result['created']} ajoutées, {$result['updated']} mises à jour)", $siteId, new FuelAssignment());

@@ -21,7 +21,7 @@ import {
   CircleSlash,
   Sparkles,
 } from 'lucide-react';
-import { api, apiErrorMessage, downloadFile } from '../api/client';
+import { api, apiErrorMessage, downloadFile, uploadErrorMessage } from '../api/client';
 import { useFuelSite } from '../hooks/useFuelSite';
 import type { FuelAssignment, FuelDailyReport, FuelReportVehicle } from '../types';
 import { Button } from '../components/ui/Button';
@@ -453,7 +453,7 @@ function AssignmentsView({ siteFilter, assignments }: { siteFilter: { site_id?: 
       toast.success(`Affectation importée : ${data.created} ajoutée(s), ${data.updated} mise(s) à jour.`);
       queryClient.invalidateQueries({ queryKey: ['fuel'] });
     } catch (err) {
-      toast.error(apiErrorMessage(err, "Échec de l'import."));
+      toast.error(uploadErrorMessage(err, file), { duration: 8000 });
     } finally {
       setImporting(false);
       if (fileRef.current) fileRef.current.value = '';

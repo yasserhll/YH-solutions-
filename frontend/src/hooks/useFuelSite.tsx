@@ -22,18 +22,23 @@ export function useFuelSite(label: string) {
     if (siteParams.site_id) setPickedSite(siteParams.site_id);
   }, [siteParams.site_id]);
 
-  const { data: allTanks } = useQuery({
+  const { data: allTanks, isError: tanksFailed } = useQuery({
     queryKey: ['fuel', 'tanks', {}],
     queryFn: () => api.get<FuelTank[]>('/fuel/tanks').then((r) => r.data),
     enabled: needsSiteSelect,
   });
   const tankCountBySite = useMemo(() => {
     const counts = new Map<number, number>();
-    for (const t of allTanks ?? []) counts.set(t.site.id, (counts.get(t.site.id) ?? 0) + 1);
+    // Same rule as the Global: a citerne counts for its own site and for every site its lines belong to.
+    for (const t of allTanks ?? []) {
+      for (const id of new Set([Number(t.site.id), ...(t.line_sites ?? []).map((s) => Number(s.id))])) {
+        counts.set(id, (counts.get(id) ?? 0) + 1);
+      }
+    }
     return counts;
   }, [allTanks]);
 
-  const siteId = needsSiteSelect ? (pickedSite ?? allTanks?.[0]?.site.id ?? (allTanks ? sites[0]?.id : undefined) ?? null) : null;
+  const siteId = needsSiteSelect ? (pickedSite ?? allTanks?.[0]?.site.id ?? (allTanks || tanksFailed ? sites[0]?.id : undefined) ?? null) : null;
   const siteFilter: { site_id?: number } = siteId ? { site_id: siteId } : {};
   const ready = !needsSiteSelect || siteId !== null;
 
@@ -43,7 +48,7 @@ export function useFuelSite(label: string) {
         <MapPin size={15} className="text-orange-500" /> {label}
       </span>
       {sites.map((site) => {
-        const count = tankCountBySite.get(site.id) ?? 0;
+        const count = tankCountBySite.get(Number(site.id)) ?? 0;
         return (
           <button
             key={site.id}
@@ -56,15 +61,17 @@ export function useFuelSite(label: string) {
             )}
           >
             {site.name}
-            <span
-              className={clsx(
-                'rounded-full px-1.5 text-xs tabular-nums',
-                siteId === site.id ? 'bg-white/20 dark:bg-slate-900/10' : count ? 'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400' : 'bg-slate-100 text-slate-400 dark:bg-slate-800',
-              )}
-              title="Citernes importées"
-            >
-              {count}
-            </span>
+            {!tanksFailed && (
+              <span
+                className={clsx(
+                  'rounded-full px-1.5 text-xs tabular-nums',
+                  siteId === site.id ? 'bg-white/20 dark:bg-slate-900/10' : count ? 'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400' : 'bg-slate-100 text-slate-400 dark:bg-slate-800',
+                )}
+                title="Citernes importées"
+              >
+                {count}
+              </span>
+            )}
           </button>
         );
       })}

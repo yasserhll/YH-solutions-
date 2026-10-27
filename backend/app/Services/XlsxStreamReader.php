@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use Carbon\CarbonImmutable;
-use RuntimeException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use XMLReader;
 use ZipArchive;
 
@@ -27,7 +27,7 @@ class XlsxStreamReader
     {
         $this->zip = new ZipArchive();
         if ($this->zip->open($path) !== true) {
-            throw new RuntimeException("Le fichier n'est pas un classeur Excel (.xlsx) valide.");
+            throw new HttpException(422, "Le fichier n'est pas un classeur Excel (.xlsx) valide : ouvrez-le dans Excel et enregistrez-le en « Classeur Excel (.xlsx) ».");
         }
         $this->loadSharedStrings();
     }
@@ -45,7 +45,7 @@ class XlsxStreamReader
         $workbook = $this->zip->getFromName('xl/workbook.xml');
         $rels = $this->zip->getFromName('xl/_rels/workbook.xml.rels');
         if ($workbook === false || $rels === false) {
-            throw new RuntimeException('Classeur Excel illisible.');
+            throw new HttpException(422, 'Classeur Excel illisible.');
         }
 
         $targets = [];
@@ -77,7 +77,7 @@ class XlsxStreamReader
     {
         $stream = $this->zip->getStream($sheetPath);
         if ($stream === false) {
-            throw new RuntimeException('Feuille Excel illisible.');
+            throw new HttpException(422, 'Feuille Excel illisible.');
         }
         $xml = stream_get_contents($stream);
         fclose($stream);

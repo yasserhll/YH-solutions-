@@ -576,6 +576,8 @@ export interface FuelTank {
   date_to: string | null;
   last_serie: number | null;
   spark: { date: string; litres: number }[];
+  /** Sites this citerne's lines belong to, when that differs from its own site (empty when consistent). */
+  line_sites: { id: number; name: string; rows: number }[];
 }
 
 export interface FuelTankImportSummary {

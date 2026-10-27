@@ -34,7 +34,7 @@ import {
   History,
 } from 'lucide-react';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { api, apiErrorMessage, downloadFile } from '../api/client';
+import { api, apiErrorMessage, downloadFile, uploadErrorMessage } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
 import { useSelectableSites } from '../hooks/useReferenceData';
 import { useUrlTab } from '../hooks/useUrlTab';
@@ -868,7 +868,7 @@ function TanksTab({ onAddMatricule }: { onAddMatricule: (code: string) => void }
   const inputRef = useRef<HTMLInputElement>(null);
   const busy = uploads.some((u) => u.status === 'uploading' || u.status === 'processing' || u.status === 'pending');
 
-  const { data: tanks, isLoading } = useQuery({
+  const { data: tanks, isLoading, isError, refetch } = useQuery({
     queryKey: ['fuel', 'tanks', siteParams],
     queryFn: () => api.get<FuelTank[]>('/fuel/tanks', { params: siteParams }).then((r) => r.data),
   });
@@ -922,7 +922,7 @@ function TanksTab({ onAddMatricule }: { onAddMatricule: (code: string) => void }
         patch(item.id, { status: 'done', progress: 100, result: data.tanks });
         toast.success(`${item.file.name} importé`);
       } catch (err) {
-        patch(item.id, { status: 'error', error: apiErrorMessage(err, "Échec de l'import.") });
+        patch(item.id, { status: 'error', error: uploadErrorMessage(err, item.file) });
       }
       queryClient.invalidateQueries({ queryKey: ['fuel'] });
     }
@@ -1001,6 +1001,17 @@ function TanksTab({ onAddMatricule }: { onAddMatricule: (code: string) => void }
       {/* Tank cards */}
       {isLoading ? (
         <LoadingState rows={4} />
+      ) : isError ? (
+        <div className={clsx(card, 'flex flex-col items-center gap-3 p-8 text-center')}>
+          <AlertTriangle size={28} className="text-red-500" />
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            La liste des citernes n'a pas pu être chargée depuis le serveur. Lancez « php artisan consommation:diagnostic » sur le serveur et regardez
+            storage/logs/laravel.log.
+          </p>
+          <Button variant="secondary" size="sm" onClick={() => refetch()}>
+            Réessayer
+          </Button>
+        </div>
       ) : !tanks?.length ? (
         <div className={card}>
           <EmptyState icon={Container} title="Aucune citerne" message="Importez un premier fichier ci-dessus pour créer vos citernes." />
@@ -1115,6 +1126,14 @@ function TankCard({ tank, index, onView, onDelete }: { tank: FuelTank; index: nu
           <div className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
             <MapPin size={11} /> {tank.site.name} · {isMobile ? 'Citerne mobile' : 'Citerne fixe'}
           </div>
+          {(tank.line_sites ?? []).length > 0 && (
+            <div
+              className="mt-1 inline-flex items-center gap-1 rounded-md bg-red-50 px-1.5 py-0.5 text-[11px] font-medium text-red-600 dark:bg-red-500/10 dark:text-red-400"
+              title="La citerne et ses lignes ne sont pas rattachées au même site. Sur le serveur : php artisan consommation:diagnostic --reparer-sites"
+            >
+              <AlertTriangle size={11} /> Lignes rattachées à {tank.line_sites.map((s) => s.name).join(', ')}
+            </div>
+          )}
         </div>
         <div className="flex gap-1 opacity-60 transition-opacity group-hover:opacity-100">
           <button onClick={onView} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Voir les lignes">
@@ -1314,7 +1333,7 @@ function VehiclesTab({ prefillCode, onPrefillConsumed }: { prefillCode: string |
       toast.success(`${r.total} matricules lus : ${r.created} ajoutés, ${r.updated} mis à jour.`, { duration: 5000 });
       queryClient.invalidateQueries({ queryKey: ['fuel'] });
     } catch (err) {
-      toast.error(apiErrorMessage(err, "Échec de l'import."));
+      toast.error(uploadErrorMessage(err, file), { duration: 8000 });
     } finally {
       setImporting(false);
     }
