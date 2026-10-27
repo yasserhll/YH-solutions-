@@ -234,6 +234,8 @@ Hence:
 - `consommation:diagnostic` prints the citerne → site / lines → site table.
 - `--reparer-sites` re-attaches such a citerne to its lines' site. It asks for confirmation and touches only `fuel_tanks.site_id`.
 
+**"Aucune citerne" after a successful import:** `FuelTankController@index` once fetched each citerne's last SERIE FIN with a correlated `MAX(id)` subquery. It took 40 s on 8 000 lines, so `GET /fuel/tanks` hit 504 and the tab looked empty, though the data was in the DB. With only 5 FPM workers, those slow requests also stalled the rest of the app. It is now a grouped `MAX(id)` + `joinSub` (0.06 s). Don't bring back per-row subqueries on `fuel_movements`. The production nginx vhost also sets `fastcgi_read_timeout 300s`, matching the 300 s the imports request. Before that, an import that finished after 60 s still showed an error in the browser.
+
 On a server holding real data, only ever run `php artisan migrate --force`, which only adds what is missing. The three fuel migrations only create tables/columns plus a fingerprint backfill on `fuel_movements`. Never run `migrate:fresh`/`migrate:refresh`/`db:seed`: they wipe everyone's data.
 
 ### HSE module: two roles restricted to ONLY this module, nothing else

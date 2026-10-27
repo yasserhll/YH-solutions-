@@ -52,9 +52,15 @@ class FuelTankController extends Controller
             ])->keyBy('fuel_tank_id');
 
         // Pump index (SERIE FIN) on each citerne's most recent line.
+        // Grouped MAX(id) joined back, not a correlated subquery: MySQL re-ran
+        // that one for every line (40 s on 8 000 lines → 504, "Aucune citerne").
+        $lastIds = DB::table('fuel_movements')
+            ->whereIn('fuel_tank_id', $ids)
+            ->whereNotNull('serie_end')
+            ->groupBy('fuel_tank_id')
+            ->select(DB::raw('MAX(id) as id'));
         $lastSerie = DB::table('fuel_movements as m')
-            ->whereIn('m.fuel_tank_id', $ids)
-            ->whereRaw('m.id = (SELECT MAX(x.id) FROM fuel_movements x WHERE x.fuel_tank_id = m.fuel_tank_id AND x.serie_end IS NOT NULL)')
+            ->joinSub($lastIds, 'last', 'last.id', '=', 'm.id')
             ->pluck('m.serie_end', 'm.fuel_tank_id');
 
         // Last 30 days of exits per citerne, for the sparkline on each card.
