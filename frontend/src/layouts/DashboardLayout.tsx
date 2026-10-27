@@ -10,6 +10,7 @@ import {
   Briefcase,
   Timer,
   Wallet,
+  Fuel,
   Users,
   UserCog,
   FileBarChart,
@@ -65,6 +66,7 @@ const navItems = [
   { to: '/affectations', label: 'Affectations', icon: Briefcase },
   { to: '/heures-supplementaires', label: 'Heures supplémentaires', icon: Timer },
   { to: '/caisse', label: 'Caisse', icon: Wallet },
+  { to: '/consommation', label: 'Consommation', icon: Fuel },
   { to: '/personnel', label: 'Personnel', icon: Users },
 ];
 

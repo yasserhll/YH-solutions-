@@ -291,4 +291,231 @@ class ExcelExportService
             $sheet->getStyle($cell)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FF'.$fill);
         }
     }
+
+    /**
+     * Replica of the company's own "global.xlsx" (sheet "GLOBAL %"): same
+     * 11 columns A→K, same header colours (D9F2D0 green, CFE2F3 blue on
+     * Parcours/Consommation), fonts, widths, number formats, and the same
+     * live formulas — Parcours = E−F, Consommation = H/G for a km vehicle or
+     * H/G/100 for an hour-metered engine, shown as 0.00% exactly like the
+     * original — so the exported file can be edited like the hand-made one.
+     * Styles are applied per column range (never per cell) so 10k+ rows stay fast.
+     *
+     * @param  array<int, array<string, mixed>>  $rows  FuelGlobalController::shape() rows, oldest first
+     */
+    public function streamFuelGlobal(string $filename, array $rows): StreamedResponse
+    {
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('GLOBAL %');
+        $sheet->setShowGridlines(false);
+        $spreadsheet->getDefaultStyle()->getFont()->setName('Calibri')->setSize(11);
+
+        $sheet->fromArray(['Date', 'Heure', 'Code', 'Immatriculation', 'Compteur fin', 'Compteur début', 'Parcours', 'Litre', 'Consommation', 'Remarque', 'Affectation'], null, 'A1');
+
+        $data = [];
+        $line = 2;
+        foreach ($rows as $r) {
+            $hasCounters = $r['odometer'] !== null && $r['previous_odometer'] !== null;
+            $divisor = $r['unit'] === 'km' ? '' : '/100';
+            $data[] = [
+                $r['date'] ? \PhpOffice\PhpSpreadsheet\Shared\Date::stringToExcel($r['date']) : null,
+                $r['time'] ? $this->timeFraction($r['time']) : null,
+                $r['code'] !== null && ctype_digit($r['code']) ? (int) $r['code'] : $r['code'],
+                $r['matricule'] ?? '',
+                $r['odometer'],
+                $r['previous_odometer'],
+                $hasCounters ? "=+E{$line}-F{$line}" : null,
+                $r['quantity'],
+                $hasCounters ? "=IFERROR(IF(G{$line}>0,H{$line}/G{$line}{$divisor},\"\"),\"\")" : null,
+                $r['remark'] ?? '',
+                $r['tank'],
+            ];
+            $line++;
+        }
+        if ($data) {
+            $sheet->fromArray($data, null, 'A2', true);
+        }
+        $last = max($line - 1, 1);
+
+        $thin = ['borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]];
+        $green = ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFD9F2D0']];
+        $blue = ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFCFE2F3']];
+
+        $sheet->getStyle('A1:K1')->applyFromArray($thin + [
+            'font' => ['bold' => true],
+            'fill' => $green,
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER, 'wrapText' => true],
+        ]);
+        $sheet->getStyle('E1:F1')->getFont()->setSize(10);
+        $sheet->getStyle('G1')->getFill()->applyFromArray($blue);
+        $sheet->getStyle('I1')->getFill()->applyFromArray($blue);
+
+        if ($last >= 2) {
+            $sheet->getStyle("A2:K{$last}")->applyFromArray($thin + [
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+            ]);
+            $gothic = ['font' => ['name' => 'Century Gothic', 'color' => ['argb' => 'FF3A3838']]];
+            $sheet->getStyle("A2:A{$last}")->applyFromArray($gothic)->getNumberFormat()->setFormatCode('d/m/yyyy');
+            $sheet->getStyle("D2:D{$last}")->applyFromArray($gothic);
+            $sheet->getStyle("B2:B{$last}")->getNumberFormat()->setFormatCode('h:mm:ss AM/PM');
+            $sheet->getStyle("G2:G{$last}")->applyFromArray(['font' => ['name' => 'Aptos Narrow'], 'fill' => $blue]);
+            $sheet->getStyle("I2:I{$last}")->applyFromArray(['font' => ['name' => 'Aptos Narrow'], 'fill' => $blue])->getNumberFormat()->setFormatCode('0.00%');
+            $sheet->getStyle("J2:J{$last}")->getFont()->setName('Aptos Narrow');
+            $sheet->getStyle("K2:K{$last}")->getFont()->setName('Arial');
+        }
+
+        foreach (['A' => 12.89, 'B' => 12.66, 'C' => 25.11, 'D' => 26.89, 'E' => 10.33, 'F' => 9.11, 'G' => 9.0, 'H' => 11.78, 'I' => 11.11, 'J' => 33.0, 'K' => 17.44] as $column => $width) {
+            $sheet->getColumnDimension($column)->setWidth($width);
+        }
+        $sheet->getRowDimension(1)->setRowHeight(27);
+        $sheet->setAutoFilter("A1:K{$last}");
+        $sheet->freezePane('A2');
+
+        $writer = new Xlsx($spreadsheet);
+        $writer->setPreCalculateFormulas(false); // Excel recalculates on open; computing 20k formulas here would only slow the download
+
+        return new StreamedResponse(function () use ($writer) {
+            $writer->save('php://output');
+        }, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, private',
+        ]);
+    }
+
+    /**
+     * Consommation > Rapport: a replica of the company's own "RAPPORT GSL
+     * MM-YYYY.xlsx" — one sheet per day ("27-08"), title bar "CONSOMMATION
+     * JOURNALIERE DE GASOIL dd/mm/yyyy - SITE", a CAMIONS block (CHAUFFEURS
+     * équipe 1/2, Code, Litrage, %, Heure, Activite) then an ENGINS block
+     * (CONDUCTEURS, …, L / h …), each with its Total, then the day's TOTAL.
+     * A vehicle refuelled twice in the day gets two lines with its drivers,
+     * code and activité merged across them, like the original. Fonts, sizes,
+     * fills (theme colours resolved to RGB), borders and widths are copied
+     * from the reference file.
+     *
+     * @param  array<int, array>  $reports  FuelReportService::build() results, one per day
+     */
+    public function streamFuelDailyReports(string $filename, string $siteName, array $reports): StreamedResponse
+    {
+        $spreadsheet = new Spreadsheet();
+        $spreadsheet->removeSheetByIndex(0);
+        $spreadsheet->getDefaultStyle()->getFont()->setName('Aptos Narrow')->setSize(11);
+
+        foreach ($reports as $report) {
+            $sheet = $spreadsheet->createSheet();
+            $sheet->setTitle(\Illuminate\Support\Carbon::parse($report['date'])->format('d-m'));
+            $this->fillFuelDailyReport($sheet, $siteName, $report);
+        }
+        $spreadsheet->setActiveSheetIndex(0);
+
+        $writer = new Xlsx($spreadsheet);
+        $writer->setPreCalculateFormulas(false);
+
+        return new StreamedResponse(function () use ($writer) {
+            $writer->save('php://output');
+        }, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, private',
+        ]);
+    }
+
+    private function fillFuelDailyReport(Worksheet $sheet, string $siteName, array $report): void
+    {
+        $medium = ['borders' => ['allBorders' => ['borderStyle' => Border::BORDER_MEDIUM]]];
+        $center = ['alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER, 'wrapText' => true]];
+        $fill = fn (string $rgb) => ['fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF'.$rgb]]];
+        $font = fn (string $name, float $size, string $color = '000000') => ['font' => ['name' => $name, 'size' => $size, 'bold' => true, 'color' => ['argb' => 'FF'.$color]]];
+        $navy = '0B1E31';   // theme dk2, darker 25%
+        $green = 'B4E5A2';  // theme accent6, lighter 60%
+
+        foreach (['A' => 11.44, 'B' => 10.22, 'C' => 8.44, 'D' => 43.89, 'E' => 52.66, 'F' => 21.78, 'G' => 15.78, 'H' => 13.78, 'I' => 11.78, 'J' => 44.33] as $column => $width) {
+            $sheet->getColumnDimension($column)->setWidth($width);
+        }
+        $sheet->getSheetView()->setZoomScale(74);
+
+        $title = 'CONSOMMATION JOURNALIERE DE GASOIL '.\Illuminate\Support\Carbon::parse($report['date'])->format('d/m/Y').'  - '.mb_strtoupper($siteName);
+        $sheet->setCellValue('D2', $title)->mergeCells('D2:J2');
+        $sheet->getStyle('D2:J2')->applyFromArray($medium + $center + $fill($green) + $font('Century Schoolbook', 22));
+        $sheet->getRowDimension(2)->setRowHeight(28.2);
+
+        $row = 4;
+        $totalRows = [];
+        $blocks = [
+            ['vehicles' => $report['camions'], 'people' => 'CHAUFFEURS', 'code' => 'Code', 'ratio' => '%', 'activity' => 'Activite', 'size' => 18, 'litresFill' => 'FFFFFF'],
+            ['vehicles' => $report['engins'], 'people' => 'CONDUCTEURS', 'code' => 'Code ', 'ratio' => 'L / h', 'activity' => 'Activité', 'size' => 16, 'litresFill' => 'F2F2F2'],
+        ];
+
+        foreach ($blocks as $block) {
+            // Two-line header: CHAUFFEURS over EQUIPE 1 / EQUIPE 2, the other titles merged over both lines.
+            $sheet->setCellValue("D{$row}", $block['people'])->mergeCells("D{$row}:E{$row}");
+            $sheet->setCellValue('D'.($row + 1), 'EQUIPE 1')->setCellValue('E'.($row + 1), 'EQUIPE 2');
+            foreach (['F' => $block['code'], 'G' => 'Litrage', 'H' => $block['ratio'], 'I' => 'Heure', 'J' => $block['activity']] as $column => $label) {
+                $sheet->setCellValue("{$column}{$row}", $label)->mergeCells("{$column}{$row}:{$column}".($row + 1));
+            }
+            $sheet->getStyle("D{$row}:J".($row + 1))->applyFromArray($medium + $center + $fill($navy) + $font('Century Schoolbook', 16, 'F2F2F2'));
+            $sheet->getStyle("D{$row}")->applyFromArray($font('Aptos Narrow', 18, 'F2F2F2'));
+            $sheet->getRowDimension($row)->setRowHeight(24);
+            $sheet->getRowDimension($row + 1)->setRowHeight(21);
+            $row += 2;
+
+            $first = $row;
+            foreach ($block['vehicles'] as $vehicle) {
+                $start = $row;
+                foreach ($vehicle['refuels'] as $refuel) {
+                    $sheet->setCellValue("G{$row}", $refuel['quantity']);
+                    $sheet->setCellValue("H{$row}", $refuel['ratio'] ?? '-');
+                    $sheet->setCellValue("I{$row}", $refuel['hours'] ?? ($refuel['no_counter'] ? 'CP' : '-'));
+                    $sheet->getRowDimension($row)->setRowHeight(24);
+                    $row++;
+                }
+                $end = $row - 1;
+                $sheet->setCellValue("D{$start}", $vehicle['driver_1'] ?? '-');
+                $sheet->setCellValue("E{$start}", $vehicle['driver_2'] ?? '-');
+                $sheet->setCellValueExplicit("F{$start}", $vehicle['label'], \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValue("J{$start}", $vehicle['activity'] ?? '-');
+                if ($end > $start) {
+                    foreach (['D', 'E', 'F', 'J'] as $column) {
+                        $sheet->mergeCells("{$column}{$start}:{$column}{$end}");
+                    }
+                }
+            }
+            $last = $row - 1;
+
+            if ($last >= $first) {
+                $sheet->getStyle("D{$first}:J{$last}")->applyFromArray($medium + $center);
+                $sheet->getStyle("D{$first}:F{$last}")->applyFromArray($fill('FFFFFF') + $font('Calibri', 18));
+                $sheet->getStyle("G{$first}:G{$last}")->applyFromArray($fill($block['litresFill']) + $font('Aptos Narrow', $block['size']));
+                $sheet->getStyle("H{$first}:I{$last}")->applyFromArray($font('Aptos Narrow', $block['size']));
+                $sheet->getStyle("H{$first}:H{$last}")->getNumberFormat()->setFormatCode('0.00%');
+                $sheet->getStyle("J{$first}:J{$last}")->applyFromArray($font('Aptos Narrow', 16));
+            }
+
+            $sheet->setCellValue("D{$row}", 'Total')->mergeCells("D{$row}:F{$row}");
+            $sheet->setCellValue("G{$row}", $last >= $first ? "=+SUM(G{$first}:G{$last})" : 0)->mergeCells("G{$row}:J{$row}");
+            $sheet->getStyle("D{$row}:J{$row}")->applyFromArray($medium + $center + $font('Aptos Narrow', 22));
+            $sheet->getStyle("D{$row}:F{$row}")->applyFromArray($fill($green));
+            $sheet->getStyle("G{$row}:J{$row}")->applyFromArray($fill('FFC000'));
+            $sheet->getRowDimension($row)->setRowHeight(28);
+            $totalRows[] = $row;
+            $row += 2;
+        }
+
+        // Day TOTAL (camions + engins), two lines high like the original.
+        $sheet->setCellValue("D{$row}", 'TOTAL')->mergeCells("D{$row}:F".($row + 1));
+        $sheet->setCellValue("G{$row}", '=G'.$totalRows[1].'+G'.$totalRows[0])->mergeCells("G{$row}:J".($row + 1));
+        $sheet->getStyle("D{$row}:J".($row + 1))->applyFromArray($medium + $center + $font('Aptos Narrow', 24));
+        $sheet->getStyle("D{$row}:F".($row + 1))->applyFromArray($fill($navy) + $font('Aptos Narrow', 24, 'F2F2F2'));
+        $sheet->getStyle("G{$row}:J".($row + 1))->applyFromArray($fill('FF0000'));
+    }
+
+    /** "14:02:00" -> 0.5847… (Excel time = fraction of a day) */
+    private function timeFraction(string $time): float
+    {
+        [$h, $m, $s] = array_map('intval', explode(':', $time) + [0, 0, 0]);
+
+        return ($h * 3600 + $m * 60 + $s) / 86400;
+    }
 }

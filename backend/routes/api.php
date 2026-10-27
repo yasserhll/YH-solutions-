@@ -12,6 +12,11 @@ use App\Http\Controllers\Api\DisciplinaryWarningController;
 use App\Http\Controllers\Api\EmployeeController;
 use App\Http\Controllers\Api\EntryController;
 use App\Http\Controllers\Api\ExitController;
+use App\Http\Controllers\Api\FuelGlobalController;
+use App\Http\Controllers\Api\FuelTankController;
+use App\Http\Controllers\Api\FuelMovementController;
+use App\Http\Controllers\Api\FuelReportController;
+use App\Http\Controllers\Api\FuelVehicleController;
 use App\Http\Controllers\Api\HolidayController;
 use App\Http\Controllers\Api\HseReportController;
 use App\Http\Controllers\Api\HseUserController;
@@ -118,6 +123,28 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/reports/overtime/export', [ReportController::class, 'exportOvertime']);
 
         Route::get('/audit-logs', [AuditLogController::class, 'index']);
+
+        // Consommation (fuel): Matriculation (company-wide lookup), Citernes
+        // (Excel imports, site-scoped) and the automatically-built Global view.
+        Route::get('/fuel/global', [FuelGlobalController::class, 'index']);
+        Route::get('/fuel/global/export', [FuelGlobalController::class, 'export']);
+        Route::get('/fuel/tanks', [FuelTankController::class, 'index']);
+        Route::post('/fuel/tanks/import', [FuelTankController::class, 'import']);
+        Route::delete('/fuel/tanks/{fuelTank}', [FuelTankController::class, 'destroy']);
+        Route::get('/fuel/movements', [FuelTankController::class, 'movements']);
+        Route::post('/fuel/movements', [FuelMovementController::class, 'store']);
+        Route::put('/fuel/movements/{fuelMovement}', [FuelMovementController::class, 'update']);
+        Route::delete('/fuel/movements/{fuelMovement}', [FuelMovementController::class, 'destroy']);
+        Route::get('/fuel/report', [FuelReportController::class, 'show']);
+        Route::put('/fuel/report/lines', [FuelReportController::class, 'saveLine']);
+        Route::get('/fuel/report/export', [FuelReportController::class, 'export']);
+        Route::get('/fuel/assignments', [FuelReportController::class, 'assignments']);
+        Route::post('/fuel/assignments', [FuelReportController::class, 'storeAssignment']);
+        Route::post('/fuel/assignments/import', [FuelReportController::class, 'importAssignments']);
+        Route::put('/fuel/assignments/{fuelAssignment}', [FuelReportController::class, 'updateAssignment']);
+        Route::delete('/fuel/assignments/{fuelAssignment}', [FuelReportController::class, 'destroyAssignment']);
+        Route::post('/fuel/vehicles/import', [FuelVehicleController::class, 'import']);
+        Route::apiResource('fuel/vehicles', FuelVehicleController::class)->only(['index', 'store', 'update', 'destroy'])->parameters(['vehicles' => 'fuelVehicle']);
 
         Route::middleware('superadmin')->group(function () {
             Route::post('/sites', [SiteController::class, 'store']);

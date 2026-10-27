@@ -17,6 +17,7 @@ import MovementsPage from './pages/MovementsPage';
 import AssignmentsPage from './pages/AssignmentsPage';
 import OvertimePage from './pages/OvertimePage';
 import CashPage from './pages/CashPage';
+import ConsommationPage from './pages/ConsommationPage';
 import UsersPage from './pages/UsersPage';
 import ReportsPage from './pages/ReportsPage';
 import HistoriquePage from './pages/HistoriquePage';
@@ -165,6 +166,14 @@ export default function App() {
                     element={
                       <RequireFullAccess>
                         <CashPage />
+                      </RequireFullAccess>
+                    }
+                  />
+                  <Route
+                    path="/consommation"
+                    element={
+                      <RequireFullAccess>
+                        <ConsommationPage />
                       </RequireFullAccess>
                     }
                   />

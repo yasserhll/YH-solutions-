@@ -39,3 +39,26 @@ html.dark body {
 html.dark ::-webkit-scrollbar-thumb {
   background: #3a4152;
 }
+
+/* Entrance animation used by the Consommation module's cards/panels
+   (`animate-fade-up`, staggered with an inline animation-delay). */
+@theme {
+  --animate-fade-up: fade-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up {
+    animation: none;
+  }
+}

@@ -479,3 +479,181 @@ export interface DashboardData {
     recent_operations: CashTransaction[];
   };
 }
+
+// --- Consommation (fuel) ---
+
+export type FuelUnit = 'km' | 'h';
+
+export interface FuelVehicle {
+  id: number;
+  code: string;
+  matricule: string | null;
+  type: string | null;
+  /** Counter unit override; null = from the code (numeric → km, else heures). */
+  unit: FuelUnit | null;
+}
+
+/** One line of a site's "LISTE D'AFFECTATION" (Consommation > Rapport). */
+export interface FuelAssignment {
+  id: number;
+  site_id: number;
+  code: string;
+  label: string | null;
+  category: 'camion' | 'engin';
+  driver_1: string | null;
+  driver_2: string | null;
+  replacements: string | null;
+  activity: string | null;
+  sort_order: number;
+}
+
+export interface FuelReportRefuel {
+  id: number;
+  time: string | null;
+  quantity: number;
+  tank: string;
+  remark: string | null;
+  unit: FuelUnit;
+  no_counter: boolean;
+  /** Heures (or km) since the previous refuel. */
+  hours: number | null;
+  /** The report's "%" column: L/h (or L/100 km) ÷ 100. */
+  ratio: number | null;
+}
+
+export interface FuelReportVehicle {
+  code: string;
+  label: string;
+  matricule: string | null;
+  category: 'camion' | 'engin';
+  assigned: boolean;
+  driver_1: string | null;
+  driver_2: string | null;
+  activity: string | null;
+  /** Drivers/activité were typed by hand for this day. */
+  edited: boolean;
+  litres: number;
+  refuels: FuelReportRefuel[];
+}
+
+export interface FuelDailyReport {
+  site: { id: number; name: string } | null;
+  date: string;
+  /** Last day covered by the imported citerne files. */
+  last_date: string | null;
+  assignments_count: number;
+  camions: FuelReportVehicle[];
+  engins: FuelReportVehicle[];
+  totals: { camions: number; engins: number; all: number };
+  prev_date: string | null;
+  next_date: string | null;
+}
+
+export interface FuelUnknownCode {
+  code: string;
+  refuels: number;
+  litres: number;
+}
+
+export interface FuelVehiclesPage extends Paginated<FuelVehicle> {
+  unknown_codes: FuelUnknownCode[];
+  total_vehicles: number;
+}
+
+export interface FuelTank {
+  id: number;
+  name: string;
+  site: { id: number; name: string };
+  last_import_file: string | null;
+  last_imported_at: string | null;
+  last_imported_by: string | null;
+  litres_in: number;
+  litres_out: number;
+  entries: number;
+  exits: number;
+  vehicles: number;
+  date_from: string | null;
+  date_to: string | null;
+  last_serie: number | null;
+  spark: { date: string; litres: number }[];
+}
+
+export interface FuelTankImportSummary {
+  tank_id: number;
+  tank: string;
+  created: boolean;
+  previous_rows: number;
+  rows: number;
+  entries: number;
+  exits: number;
+  litres_in: number;
+  litres_out: number;
+  date_from: string | null;
+  date_to: string | null;
+  skipped: number;
+  unknown_codes: string[];
+  /** Hand corrections from the Global (edits, deletions, added lines) kept through this re-import. */
+  kept_edits: number;
+}
+
+export interface FuelMovement {
+  id: number;
+  fuel_tank_id: number;
+  type: 'entry' | 'exit';
+  date: string;
+  time: string | null;
+  quantity: number;
+  supplier: string | null;
+  bon_number: string | null;
+  vehicle_code: string | null;
+  matricule: string | null;
+  odometer: number | null;
+  serie_start: number | null;
+  serie_end: number | null;
+  remark: string | null;
+}
+
+export interface FuelGlobalRow {
+  id: number;
+  date: string;
+  time: string | null;
+  code: string | null;
+  matricule: string | null;
+  vehicle_type: string | null;
+  odometer: number | null;
+  previous_odometer: number | null;
+  distance: number | null;
+  quantity: number;
+  consumption: number | null;
+  unit: FuelUnit;
+  remark: string | null;
+  bon_number: string | null;
+  fuel_tank_id: number;
+  /** 'manual' = added by hand from the Global; an imported row edited by hand has edited = true. */
+  origin: 'import' | 'manual';
+  edited: boolean;
+  is_transfer: boolean;
+  tank: string;
+  site: string;
+}
+
+export interface FuelGlobalSummary {
+  litres_out: number;
+  litres_in: number;
+  refuels: number;
+  vehicles: number;
+  avg_l_100km: number | null;
+  avg_l_h: number | null;
+  transfers: { litres: number; count: number };
+  anomalies: { negative: number; no_counter: number; unknown: number };
+  date_from: string | null;
+  date_to: string | null;
+  daily: { date: string; litres: number; refuels: number }[];
+  top_vehicles: { code: string; matricule: string | null; litres: number; refuels: number; unit: FuelUnit; avg_consumption: number | null }[];
+  by_tank: { id: number; name: string; site: string; litres: number; refuels: number }[];
+}
+
+export interface FuelGlobalPage extends Paginated<FuelGlobalRow> {
+  site: { id: number; name: string } | null;
+  summary: FuelGlobalSummary;
+}
