@@ -410,8 +410,11 @@ class ExcelExportService
         }
         $spreadsheet->setActiveSheetIndex(0);
 
+        // Store each Total's value in the file next to its formula: without it,
+        // anything that doesn't recalculate (Excel's protected view on a
+        // downloaded file, phone/WhatsApp/Drive previews) shows empty totals.
+        // Only three formulas per day, so this costs nothing.
         $writer = new Xlsx($spreadsheet);
-        $writer->setPreCalculateFormulas(false);
 
         return new StreamedResponse(function () use ($writer) {
             $writer->save('php://output');
