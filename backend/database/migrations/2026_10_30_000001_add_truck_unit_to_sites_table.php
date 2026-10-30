@@ -14,14 +14,18 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('sites', function (Blueprint $table) {
-            $table->enum('truck_unit', ['km', 'h'])->default('km')->after('slug');
-        });
+        // Guarded: a first production run added the column, then crashed on the
+        // recalculate() below that needed fuel_vehicles.brand (next migration).
+        if (! Schema::hasColumn('sites', 'truck_unit')) {
+            Schema::table('sites', function (Blueprint $table) {
+                $table->enum('truck_unit', ['km', 'h'])->default('km')->after('slug');
+            });
+        }
 
         DB::table('sites')->where('slug', 'louta')->update(['truck_unit' => 'h']);
 
-        // Existing Global rows of the km sites were computed as L/h: rebuild them.
-        app(\App\Services\FuelConsumptionService::class)->recalculate();
+        // The Global is rebuilt by the next migration, once fuel_vehicles.brand
+        // exists: recalculate() reads it.
     }
 
     public function down(): void

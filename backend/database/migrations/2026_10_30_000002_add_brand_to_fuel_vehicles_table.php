@@ -13,9 +13,15 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('fuel_vehicles', function (Blueprint $table) {
-            $table->enum('brand', ['sinotruk', 'man', 'renault'])->nullable()->after('type');
-        });
+        if (! Schema::hasColumn('fuel_vehicles', 'brand')) {
+            Schema::table('fuel_vehicles', function (Blueprint $table) {
+                $table->enum('brand', ['sinotruk', 'man', 'renault'])->nullable()->after('type');
+            });
+        }
+
+        // Existing Global rows of the km sites (sites.truck_unit, previous
+        // migration) were computed as L/h: rebuild them.
+        app(\App\Services\FuelConsumptionService::class)->recalculate();
     }
 
     public function down(): void
