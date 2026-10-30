@@ -163,7 +163,7 @@ class FuelImportService
                 }
 
                 $type = $columns['type'] ? $this->text($cells[$columns['type']] ?? null) : null;
-                $byCode[$code] = ['code' => $code, 'matricule' => $matricule, 'type' => $type];
+                $byCode[$code] = ['code' => $code, 'matricule' => $matricule, 'type' => $type, 'brand' => $columns['brand'] ? $this->brand($cells[$columns['brand']] ?? null) : null];
             }
             $found = $found || $columns !== null;
         }
@@ -181,8 +181,8 @@ class FuelImportService
                 DB::table('fuel_vehicles')->upsert(
                     array_map(fn ($row) => $row + ['created_at' => $now, 'updated_at' => $now], $chunk),
                     ['code'],
-                    // A type typed by hand isn't wiped by a file whose type column is empty.
-                    ['matricule', 'updated_at', 'type' => DB::raw('COALESCE(VALUES(`type`), `type`)')]
+                    // A type/marque typed by hand isn't wiped by a file whose column is empty.
+                    ['matricule', 'updated_at', 'type' => DB::raw('COALESCE(VALUES(`type`), `type`)'), 'brand' => DB::raw('COALESCE(VALUES(`brand`), `brand`)')]
                 );
             }
         });
@@ -457,7 +457,7 @@ class FuelImportService
     /** @return array{code: string, matricule: string, type: ?string}|null */
     protected function detectVehicleColumns(array $cells): ?array
     {
-        $code = $matricule = $type = null;
+        $code = $matricule = $type = $brand = null;
         foreach ($cells as $column => $value) {
             $label = $this->label($value);
             if ($label === 'CODE') {
@@ -466,6 +466,8 @@ class FuelImportService
                 $matricule = $column;
             } elseif (in_array($label, ['TYPE', 'NATURE', 'CATEGORIE'], true)) {
                 $type = $column;
+            } elseif (in_array($label, ['MARQUE', 'MARK', 'BRAND'], true)) {
+                $brand = $column;
             }
         }
         if ($code === null || $matricule === null) {
@@ -477,7 +479,20 @@ class FuelImportService
         $next = $matricule;
         $next++;
 
-        return ['code' => $code, 'matricule' => $matricule, 'type' => $type ?? $next];
+        return ['code' => $code, 'matricule' => $matricule, 'type' => $type ?? $next, 'brand' => $brand];
+    }
+
+    /** "SINOTRUCK", "Sino Truk", "MAN TGS", "Renault Kerax"... → sinotruk / man / renault. */
+    protected function brand(mixed $value): ?string
+    {
+        $label = str_replace(' ', '', $this->label($value));
+
+        return match (true) {
+            str_starts_with($label, 'SINO') => 'sinotruk',
+            str_starts_with($label, 'MAN') => 'man',
+            str_starts_with($label, 'RENAULT') => 'renault',
+            default => null,
+        };
     }
 
     protected function label(mixed $value): string

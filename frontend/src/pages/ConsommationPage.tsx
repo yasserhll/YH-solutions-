@@ -41,6 +41,7 @@ import { useUrlTab } from '../hooks/useUrlTab';
 import { useFuelSite } from '../hooks/useFuelSite';
 import ReportTab from './ConsommationReportTab';
 import type {
+  FuelBrand,
   FuelGlobalPage,
   FuelGlobalRow,
   FuelMovement,
@@ -73,6 +74,10 @@ const frDate = (d: string | null) => (d ? new Date(d + 'T00:00:00').toLocaleDate
 const shortDate = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
 const pleins = (n: number) => `${intFmt.format(n)} plein${n > 1 ? 's' : ''}`;
 const unitLabel = (u: FuelUnit) => (u === 'km' ? 'L/100km' : 'L/h');
+
+const brandLabels: Record<FuelBrand, string> = { sinotruk: 'Sinotruk', man: 'MAN', renault: 'Renault' };
+/** Same as FuelVehicle::BRAND_UNITS on the server. */
+const brandUnits: Record<FuelBrand, FuelUnit> = { sinotruk: 'h', man: 'km', renault: 'km' };
 
 const CHART_COLORS = ['#f97316', '#3b82f6', '#22c55e', '#a855f7', '#f59e0b', '#ef4444', '#14b8a6', '#64748b'];
 
@@ -578,7 +583,7 @@ function GlobalTab({ onAddMatricule }: { onAddMatricule: (code: string) => void 
       </Panel>
 
       {editingRow && tanks && (
-        <MovementFormModal row={editingRow === 'new' ? null : editingRow} tanks={tanks} defaultTankId={tankId} onClose={() => setEditingRow(null)} />
+        <MovementFormModal row={editingRow === 'new' ? null : editingRow} tanks={tanks} defaultTankId={tankId} truckUnit={data?.site?.truck_unit ?? 'km'} onClose={() => setEditingRow(null)} />
       )}
       <ConfirmDialog
         open={!!deletingRow}
@@ -746,7 +751,7 @@ function GlobalTable({
  * and Consommation are never typed: the server recalculates the chain. The
  * correction survives a re-import of the citerne's Excel file.
  */
-function MovementFormModal({ row, tanks, defaultTankId, onClose }: { row: FuelGlobalRow | null; tanks: FuelTank[]; defaultTankId: string; onClose: () => void }) {
+function MovementFormModal({ row, tanks, defaultTankId, truckUnit, onClose }: { row: FuelGlobalRow | null; tanks: FuelTank[]; defaultTankId: string; truckUnit: FuelUnit; onClose: () => void }) {
   const queryClient = useQueryClient();
   const today = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({
@@ -761,8 +766,8 @@ function MovementFormModal({ row, tanks, defaultTankId, onClose }: { row: FuelGl
   const set = (key: keyof typeof form) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
   const code = form.vehicle_code.trim().toUpperCase();
-  // Same rule as FuelVehicle::unitFor() on the server.
-  const unit: FuelUnit = /^\d+$/.test(code) ? 'km' : 'h';
+  // Same rule as FuelVehicle::unitFor() on the server (a D camion follows its site).
+  const unit: FuelUnit = row && row.code === code ? row.unit : (/^\d+$/.test(code) ? 'km' : code.startsWith('D') ? truckUnit : 'h');
   const tankLocked = row?.origin === 'import';
 
   const mutation = useMutation({
@@ -1406,6 +1411,7 @@ function VehiclesTab({ prefillCode, onPrefillConsumed }: { prefillCode: string |
                   <th className="px-5 py-3 font-medium">Code</th>
                   <th className="px-5 py-3 font-medium">Matricule / désignation</th>
                   <th className="px-5 py-3 font-medium">Type</th>
+                  <th className="px-5 py-3 font-medium">Marque</th>
                   <th className="px-5 py-3 font-medium">Compteur</th>
                   <th className="w-24 px-5 py-3" />
                 </tr>
@@ -1418,7 +1424,10 @@ function VehiclesTab({ prefillCode, onPrefillConsumed }: { prefillCode: string |
                     </td>
                     <td className="px-5 py-2.5 font-medium text-slate-800 dark:text-slate-200">{v.matricule ?? '—'}</td>
                     <td className="px-5 py-2.5 text-slate-500 dark:text-slate-400">{v.type ?? '—'}</td>
-                    <td className="px-5 py-2.5 text-xs text-slate-500 dark:text-slate-400">{/^\d+$/.test(v.code) ? 'Kilométrique' : 'Horaire'}</td>
+                    <td className="px-5 py-2.5 text-slate-500 dark:text-slate-400">{v.brand ? brandLabels[v.brand] : '—'}</td>
+                    <td className="px-5 py-2.5 text-xs text-slate-500 dark:text-slate-400">
+                      {v.unit || v.brand ? ((v.unit ?? brandUnits[v.brand!]) === 'km' ? 'Kilométrique' : 'Horaire') : /^\d+$/.test(v.code) ? 'Kilométrique' : v.code.startsWith('D') ? 'Selon le site' : 'Horaire'}
+                    </td>
                     <td className="px-5 py-2.5">
                       <div className="flex justify-end gap-1 opacity-50 transition-opacity group-hover:opacity-100">
                         <button onClick={() => setEditing(v)} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Modifier">
@@ -1454,11 +1463,11 @@ function VehiclesTab({ prefillCode, onPrefillConsumed }: { prefillCode: string |
 function VehicleFormModal({ vehicle, onClose }: { vehicle: FuelVehicle | { code: string }; onClose: () => void }) {
   const queryClient = useQueryClient();
   const existing = 'id' in vehicle ? vehicle : null;
-  const [form, setForm] = useState({ code: vehicle.code, matricule: existing?.matricule ?? '', type: existing?.type ?? '', unit: existing?.unit ?? '' });
+  const [form, setForm] = useState({ code: vehicle.code, matricule: existing?.matricule ?? '', type: existing?.type ?? '', brand: existing?.brand ?? '', unit: existing?.unit ?? '' });
 
   const mutation = useMutation({
     mutationFn: () => {
-      const payload = { ...form, unit: form.unit || null };
+      const payload = { ...form, brand: form.brand || null, unit: form.unit || null };
       return existing ? api.put(`/fuel/vehicles/${existing.id}`, payload) : api.post('/fuel/vehicles', payload);
     },
     onSuccess: () => {
@@ -1488,13 +1497,19 @@ function VehicleFormModal({ vehicle, onClose }: { vehicle: FuelVehicle | { code:
           <option value="Groupe électrogène">Groupe électrogène</option>
           <option value="Citerne">Citerne (transfert)</option>
         </SelectField>
+        <SelectField label="Marque (camions)" value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value as FuelBrand | '' })}>
+          <option value="">Par défaut du site (Louta : Sinotruk, autres sites : MAN)</option>
+          <option value="sinotruk">Sinotruk — heures (L/h)</option>
+          <option value="man">MAN — km (L/100 km)</option>
+          <option value="renault">Renault — km (L/100 km)</option>
+        </SelectField>
         <SelectField label="Compteur" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value as FuelUnit | '' })}>
-          <option value="">Automatique (code numérique = km, sinon heures)</option>
+          <option value="">Automatique (selon la marque)</option>
           <option value="h">Heures (L/h)</option>
           <option value="km">Kilomètres (L/100 km)</option>
         </SelectField>
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          Par défaut, un code numérique est kilométrique (L/100 km) et les autres codes (camions D…, engins E…) sont horaires (L/h) ; choisissez « Compteur » pour une exception (ex. camion d'arrosage au km). Le type « Citerne » marque ses pleins comme des transferts.
+          Un camion Sinotruk se calcule à l'heure (litres / heures), un MAN ou Renault au kilomètre (litres / km × 100). Les engins E… sont toujours à l'heure. Sans marque, un camion D… prend la marque par défaut de son site : Sinotruk à Louta, MAN sur les autres sites. La marque se modifie aussi depuis Rapport → Affectation. « Compteur » force une exception (ex. camion d'arrosage au km). Le type « Citerne » marque ses pleins comme des transferts.
         </p>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>

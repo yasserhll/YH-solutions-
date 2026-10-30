@@ -28,7 +28,7 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $sites = collect(['Ben Guerir', 'Louta', 'Bouchane', 'Mzinda'])
-            ->mapWithKeys(fn ($name) => [$name => Site::create(['name' => $name, 'slug' => Str::slug($name)])]);
+            ->mapWithKeys(fn ($name) => [$name => Site::create(['name' => $name, 'slug' => Str::slug($name), 'truck_unit' => $name === 'Louta' ? 'h' : 'km'])]);
 
         $departments = collect(['Moyens généraux', 'HSE', 'Exploitation', 'Administration', 'Maintenance'])
             ->mapWithKeys(fn ($name) => [$name => Department::create(['name' => $name])]);

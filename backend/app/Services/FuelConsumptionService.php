@@ -11,7 +11,8 @@ use Illuminate\Support\Facades\DB;
  * and from Louta's mobile citerne today chains its counters across both,
  * but never across two sites — each site's global stands on its own): Compteur début = the same vehicle's previous Compteur fin,
  * Parcours = fin - début, Consommation = litres / parcours (L/100 km for a
- * km vehicle, L/h for an hour-metered engine — see FuelVehicle::unitFor).
+ * km vehicle, L/h for an hour-metered engine — see FuelVehicle::unitFor; a
+ * D camion's unit depends on its site's truck_unit).
  *
  * Same "derived ledger" philosophy as CashLedgerService/OvertimeLedgerService:
  * recomputed in full after every import, never typed in by hand, so it can't
@@ -33,6 +34,8 @@ class FuelConsumptionService
             ->get(['id', 'site_id', 'vehicle_code', 'odometer', 'quantity', 'previous_odometer', 'distance', 'consumption']);
 
         $units = DB::table('fuel_vehicles')->whereNotNull('unit')->pluck('unit', 'code');
+        $brands = DB::table('fuel_vehicles')->whereNotNull('brand')->pluck('brand', 'code');
+        $truckUnits = DB::table('sites')->pluck('truck_unit', 'id');
         $changes = [];
         $currentKey = null;
         $previous = null;
@@ -55,7 +58,7 @@ class FuelConsumptionService
             $consumption = null;
             if ($distance !== null && $distance > 0) {
                 $perUnit = (float) $row->quantity / $distance;
-                $consumption = round(FuelVehicle::unitFor($row->vehicle_code, $units[$row->vehicle_code] ?? null) === 'km' ? $perUnit * 100 : $perUnit, 4);
+                $consumption = round(FuelVehicle::unitFor($row->vehicle_code, $units[$row->vehicle_code] ?? null, $truckUnits[$row->site_id] ?? null, $brands[$row->vehicle_code] ?? null) === 'km' ? $perUnit * 100 : $perUnit, 4);
             }
 
             if (! $this->same($row->previous_odometer, $start)

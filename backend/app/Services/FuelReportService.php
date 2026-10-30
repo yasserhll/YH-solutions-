@@ -33,13 +33,14 @@ class FuelReportService
     {
         $refuels = DB::table('fuel_movements as m')
             ->join('fuel_tanks as t', 't.id', '=', 'm.fuel_tank_id')
+            ->join('sites as s', 's.id', '=', 'm.site_id')
             ->leftJoin('fuel_vehicles as v', 'v.code', '=', 'm.vehicle_code')
             ->where('m.site_id', $siteId)
             ->where('m.type', 'exit')
             ->where('m.date', $date)
             ->tap(fn ($q) => $this->scope($q, $siteId, $assignedOnly))
             ->orderBy('m.time')->orderBy('m.id')
-            ->get(['m.id', 'm.time', 'm.vehicle_code', 'm.quantity', 'm.odometer', 'm.distance', 'm.consumption', 'm.remark', 't.name as tank', 'v.matricule', 'v.unit']);
+            ->get(['m.id', 'm.time', 'm.vehicle_code', 'm.quantity', 'm.odometer', 'm.distance', 'm.consumption', 'm.remark', 't.name as tank', 'v.matricule', 'v.unit', 'v.brand', 's.truck_unit']);
 
         $codes = $refuels->pluck('vehicle_code')->unique()->values();
         $assignments = FuelAssignment::where('site_id', $siteId)->get()->keyBy('code');
@@ -101,7 +102,7 @@ class FuelReportService
 
     protected function refuel(object $r): array
     {
-        $unit = FuelVehicle::unitFor($r->vehicle_code, $r->unit);
+        $unit = FuelVehicle::unitFor($r->vehicle_code, $r->unit, $r->truck_unit, $r->brand);
         $hasParcours = $r->distance !== null && (float) $r->distance > 0;
 
         return [

@@ -11,7 +11,10 @@ use Illuminate\Database\Eloquent\Model;
  */
 class FuelVehicle extends Model
 {
-    protected $fillable = ['code', 'matricule', 'type', 'unit'];
+    protected $fillable = ['code', 'matricule', 'type', 'brand', 'unit'];
+
+    /** Counter unit of each camion make: Sinotruk is hour-metered like the engins, MAN / Renault run on km. */
+    public const BRAND_UNITS = ['sinotruk' => 'h', 'man' => 'km', 'renault' => 'km'];
 
     /**
      * Same normalization for every code, whether it comes from an import or
@@ -35,21 +38,34 @@ class FuelVehicle extends Model
     }
 
     /**
-     * Default counter unit from the code: a numeric plate prefix (85751...)
-     * is a km odometer (L/100 km); everything else — D camions, E engins,
-     * CADEX N04... — is an hour meter (L/h), as in the company's daily report.
-     * A vehicle's own `unit` (Matriculation) overrides it, e.g. the D77 water
-     * truck runs on a km odometer.
+     * Counter unit, first match wins:
+     * 1. the vehicle's own `unit` (Matriculation "Compteur"), e.g. the D77
+     *    water truck runs on a km odometer;
+     * 2. a camion's make (`brand`, see BRAND_UNITS): Sinotruk = heures,
+     *    MAN / Renault = km — never for an engin (E…), always in hours;
+     * 3. a numeric plate prefix (85751...) is a km odometer (L/100 km);
+     * 4. a D camion without a marque follows its site's default make
+     *    (`sites.truck_unit`: Louta = Sinotruk, the other sites = MAN);
+     * 5. everything else — E engins, CADEX N04... — is an hour meter (L/h).
      */
-    public static function unitFor(?string $code, ?string $override = null): string
+    public static function unitFor(?string $code, ?string $override = null, ?string $siteTruckUnit = null, ?string $brand = null): string
     {
         if ($override === 'km' || $override === 'h') {
             return $override;
         }
+        if ($brand !== null && isset(self::BRAND_UNITS[$brand]) && ! str_starts_with((string) $code, 'E')) {
+            return self::BRAND_UNITS[$brand];
+        }
+        if ($code !== null && ctype_digit($code)) {
+            return 'km';
+        }
+        if ($code !== null && str_starts_with($code, 'D') && ($siteTruckUnit === 'km' || $siteTruckUnit === 'h')) {
+            return $siteTruckUnit;
+        }
 
-        return $code !== null && ctype_digit($code) ? 'km' : 'h';
+        return 'h';
     }
 
-    /** SQL twin of unitFor() === 'km', for aggregates (needs fuel_vehicles joined as `v`). */
-    public const KM_SQL = "(COALESCE(v.unit, IF(fuel_movements.vehicle_code REGEXP '^[0-9]+$', 'km', 'h')) = 'km')";
+    /** SQL twin of unitFor() === 'km', for aggregates (needs fuel_vehicles joined as `v` and sites as `s`). */
+    public const KM_SQL = "(COALESCE(v.unit, CASE WHEN fuel_movements.vehicle_code LIKE 'E%' THEN NULL WHEN v.brand = 'sinotruk' THEN 'h' WHEN v.brand IN ('man', 'renault') THEN 'km' END, CASE WHEN fuel_movements.vehicle_code REGEXP '^[0-9]+$' THEN 'km' WHEN fuel_movements.vehicle_code LIKE 'D%' THEN s.truck_unit ELSE 'h' END) = 'km')";
 }

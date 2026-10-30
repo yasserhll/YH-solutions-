@@ -55,7 +55,7 @@ class FuelVehicleController extends Controller
     public function store(Request $request, FuelConsumptionService $consumption)
     {
         $vehicle = FuelVehicle::create($this->validated($request));
-        if ($vehicle->unit) {
+        if ($vehicle->unit || $vehicle->brand) {
             $consumption->recalculate();
         }
         AuditLogger::log('fuel.vehicle_created', "Matricule {$vehicle->code} → {$vehicle->matricule} ajouté", null, $vehicle);
@@ -66,7 +66,7 @@ class FuelVehicleController extends Controller
     public function update(Request $request, FuelVehicle $fuelVehicle, FuelConsumptionService $consumption)
     {
         $data = $this->validated($request, $fuelVehicle);
-        $unitChanged = ($data['unit'] ?? null) !== $fuelVehicle->unit;
+        $unitChanged = ($data['unit'] ?? null) !== $fuelVehicle->unit || ($data['brand'] ?? null) !== $fuelVehicle->brand;
         $fuelVehicle->update($data);
         if ($unitChanged) {
             $consumption->recalculate();
@@ -84,11 +84,13 @@ class FuelVehicleController extends Controller
         return response()->noContent();
     }
 
-    public function import(Request $request, FuelImportService $importer)
+    public function import(Request $request, FuelImportService $importer, FuelConsumptionService $consumption)
     {
         $file = $this->excelUpload($request);
 
         $result = $importer->importVehicles($file->getRealPath(), $file->getClientOriginalName());
+        // A "Marque" column can change camions' counter unit.
+        $consumption->recalculate();
         AuditLogger::log('fuel.vehicles_imported', "Matriculation importée depuis {$file->getClientOriginalName()} ({$result['created']} ajoutés, {$result['updated']} mis à jour)", null, new FuelVehicle());
 
         return response()->json($result);
@@ -102,6 +104,7 @@ class FuelVehicleController extends Controller
             'code' => ['required', 'string', 'max:60', Rule::unique('fuel_vehicles', 'code')->ignore($vehicle?->id)],
             'matricule' => ['required', 'string', 'max:120'],
             'type' => ['nullable', 'string', 'max:60'],
+            'brand' => ['nullable', Rule::in(array_keys(FuelVehicle::BRAND_UNITS))],
             'unit' => ['nullable', Rule::in(['km', 'h'])],
         ], ['code.unique' => 'Ce code existe déjà.']);
     }

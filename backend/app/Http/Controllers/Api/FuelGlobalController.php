@@ -41,7 +41,7 @@ class FuelGlobalController extends Controller
             ->paginate((int) $request->query('per_page', 25));
         $rows->getCollection()->transform(fn ($row) => $this->shape($row));
 
-        $site = Site::find($this->singleSiteId($request), ['id', 'name']);
+        $site = Site::find($this->singleSiteId($request), ['id', 'name', 'truck_unit']);
 
         return response()->json([...$rows->toArray(), 'site' => $site, 'summary' => $this->summary($request)]);
     }
@@ -68,7 +68,7 @@ class FuelGlobalController extends Controller
             ->join('sites as s', 's.id', '=', 'fuel_movements.site_id')
             ->leftJoin('fuel_vehicles as v', 'v.code', '=', 'fuel_movements.vehicle_code')
             ->where('fuel_movements.type', 'exit')
-            ->select('fuel_movements.*', 'v.matricule', 'v.type as vehicle_type', 'v.unit as vehicle_unit', 't.name as tank_name', 's.name as site_name')
+            ->select('fuel_movements.*', 'v.matricule', 'v.type as vehicle_type', 'v.unit as vehicle_unit', 'v.brand as vehicle_brand', 't.name as tank_name', 's.name as site_name', 's.truck_unit as site_truck_unit')
             ->selectRaw(self::TRANSFER_SQL.' as is_transfer');
         $query->where('fuel_movements.site_id', $this->singleSiteId($request));
 
@@ -119,7 +119,7 @@ class FuelGlobalController extends Controller
             'quantity' => $row->quantity,
             'consumption' => $row->is_transfer ? null : $row->consumption,
             'is_transfer' => (bool) $row->is_transfer,
-            'unit' => FuelVehicle::unitFor($row->vehicle_code, $row->vehicle_unit),
+            'unit' => FuelVehicle::unitFor($row->vehicle_code, $row->vehicle_unit, $row->site_truck_unit, $row->vehicle_brand),
             'remark' => $row->remark,
             'bon_number' => $row->bon_number,
             'fuel_tank_id' => $row->fuel_tank_id,
@@ -177,13 +177,15 @@ class FuelGlobalController extends Controller
             DB::raw('fuel_movements.vehicle_code as code'),
             DB::raw('MAX(v.matricule) as matricule'),
             DB::raw('MAX(v.unit) as vehicle_unit'),
+            DB::raw('MAX(s.truck_unit) as site_truck_unit'),
+            DB::raw('MAX(v.brand) as vehicle_brand'),
             DB::raw('SUM(fuel_movements.quantity) as litres'),
             DB::raw('COUNT(*) as refuels'),
             DB::raw('SUM(CASE WHEN fuel_movements.distance > 0 THEN fuel_movements.quantity END) as litres_measured'),
             DB::raw('SUM(CASE WHEN fuel_movements.distance > 0 THEN fuel_movements.distance END) as distance'),
         ])->groupBy('fuel_movements.vehicle_code')->orderByDesc('litres')->limit(10)->get()
             ->map(function ($r) {
-                $unit = FuelVehicle::unitFor($r->code, $r->vehicle_unit);
+                $unit = FuelVehicle::unitFor($r->code, $r->vehicle_unit, $r->site_truck_unit, $r->vehicle_brand);
                 $avg = $r->distance > 0 ? $r->litres_measured / $r->distance * ($unit === 'km' ? 100 : 1) : null;
 
                 return ['code' => $r->code, 'matricule' => $r->matricule, 'litres' => (float) $r->litres, 'refuels' => (int) $r->refuels, 'unit' => $unit, 'avg_consumption' => $avg !== null ? round($avg, 2) : null];

@@ -8,9 +8,11 @@ use App\Http\Controllers\Concerns\ResolvesSingleSite;
 use App\Http\Controllers\Controller;
 use App\Models\FuelAssignment;
 use App\Models\FuelReportLine;
+use App\Models\FuelVehicle;
 use App\Models\Site;
 use App\Services\AuditLogger;
 use App\Services\ExcelExportService;
+use App\Services\FuelConsumptionService;
 use App\Services\FuelImportService;
 use App\Services\FuelReportService;
 use Illuminate\Http\Request;
@@ -27,7 +29,7 @@ class FuelReportController extends Controller
 {
     use InteractsWithSites, ReceivesExcelUpload, ResolvesSingleSite;
 
-    public function __construct(protected FuelReportService $reports) {}
+    public function __construct(protected FuelReportService $reports, protected FuelConsumptionService $consumption) {}
 
     public function show(Request $request)
     {
@@ -101,9 +103,13 @@ class FuelReportController extends Controller
     public function assignments(Request $request)
     {
         $siteId = $this->singleSiteId($request);
+        $defaultBrand = Site::findOrFail($siteId)->defaultTruckBrand();
+        // The marque lives on the vehicle (Matriculation), shared with this screen.
+        $brands = FuelVehicle::whereNotNull('brand')->pluck('brand', 'code');
 
         return response()->json(
             FuelAssignment::where('site_id', $siteId)->orderBy('category')->orderBy('sort_order')->orderBy('code')->get()
+                ->map(fn (FuelAssignment $a) => [...$a->toArray(), 'brand' => $brands[$a->code] ?? null, 'default_brand' => $defaultBrand])
         );
     }
 
@@ -114,6 +120,7 @@ class FuelReportController extends Controller
             'site_id' => $siteId,
             'sort_order' => (int) FuelAssignment::where('site_id', $siteId)->max('sort_order') + 1,
         ]);
+        $this->syncBrand($request, $assignment);
         AuditLogger::log('fuel.assignment_created', "Affectation {$assignment->label} ajoutée", $siteId, $assignment);
 
         return response()->json($assignment, 201);
@@ -123,6 +130,7 @@ class FuelReportController extends Controller
     {
         $this->ensureSiteAccess($request, $fuelAssignment->site_id);
         $fuelAssignment->update($this->validatedAssignment($request, $fuelAssignment->site_id, $fuelAssignment));
+        $this->syncBrand($request, $fuelAssignment);
         AuditLogger::log('fuel.assignment_updated', "Affectation {$fuelAssignment->label} modifiée", $fuelAssignment->site_id, $fuelAssignment);
 
         return response()->json($fuelAssignment);
@@ -159,16 +167,43 @@ class FuelReportController extends Controller
             'driver_2' => ['nullable', 'string', 'max:120'],
             'replacements' => ['nullable', 'string', 'max:255'],
             'activity' => ['nullable', 'string', 'max:120'],
+            'brand' => ['nullable', Rule::in(array_keys(FuelVehicle::BRAND_UNITS))],
         ], [
             'code.required' => 'Le code doit contenir un numéro de camion (D…) ou d\'engin (E…), ex. D140, 480-E49.',
             'code.unique' => 'Ce véhicule a déjà une affectation sur ce site.',
         ]);
 
+        unset($data['brand']); // stored on the vehicle, see syncBrand()
         foreach (['label', 'driver_1', 'driver_2', 'replacements', 'activity'] as $field) {
             $value = trim(preg_replace('/\s+/', ' ', (string) ($data[$field] ?? '')));
             $data[$field] = $value === '' ? null : ($field === 'label' ? $value : mb_strtoupper($value));
         }
 
         return $data;
+    }
+
+    /**
+     * A camion's marque edited from the affectation is written on the vehicle
+     * itself (fuel_vehicles.brand), the same value the Matriculation edits —
+     * one source, so both screens always agree. Empty = the site's default.
+     */
+    protected function syncBrand(Request $request, FuelAssignment $assignment): void
+    {
+        if (! $request->has('brand') || $assignment->category !== 'camion') {
+            return;
+        }
+
+        $brand = $request->input('brand') ?: null;
+        $vehicle = FuelVehicle::firstOrNew(['code' => $assignment->code]);
+        if ($vehicle->exists && $vehicle->brand === $brand) {
+            return;
+        }
+        if (! $vehicle->exists && $brand === null) {
+            return;
+        }
+
+        $vehicle->brand = $brand;
+        $vehicle->save();
+        $this->consumption->recalculate();
     }
 }

@@ -12,7 +12,13 @@ class Site extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'slug'];
+    protected $fillable = ['name', 'slug', 'truck_unit'];
+
+    /** Make of the site's camions when none is set on the vehicle: Louta = Sinotruk (hour-metered), the others = MAN (km). */
+    public function defaultTruckBrand(): string
+    {
+        return $this->truck_unit === 'h' ? 'sinotruk' : 'man';
+    }
 
     public function employees(): HasMany
     {

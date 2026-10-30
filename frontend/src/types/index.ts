@@ -484,12 +484,16 @@ export interface DashboardData {
 
 export type FuelUnit = 'km' | 'h';
 
+/** Camion make: Sinotruk = heures (L/h), MAN / Renault = km (L/100 km). */
+export type FuelBrand = 'sinotruk' | 'man' | 'renault';
+
 export interface FuelVehicle {
   id: number;
   code: string;
   matricule: string | null;
   type: string | null;
-  /** Counter unit override; null = from the code (numeric → km, else heures). */
+  brand: FuelBrand | null;
+  /** Counter unit override; null = from the marque, then the code (see FuelVehicle::unitFor). */
   unit: FuelUnit | null;
 }
 
@@ -505,6 +509,9 @@ export interface FuelAssignment {
   replacements: string | null;
   activity: string | null;
   sort_order: number;
+  /** The camion's marque, stored on the vehicle (shared with Matriculation); null = the site's default. */
+  brand: FuelBrand | null;
+  default_brand: FuelBrand;
 }
 
 export interface FuelReportRefuel {
@@ -658,6 +665,6 @@ export interface FuelGlobalSummary {
 }
 
 export interface FuelGlobalPage extends Paginated<FuelGlobalRow> {
-  site: { id: number; name: string } | null;
+  site: { id: number; name: string; truck_unit: FuelUnit } | null;
   summary: FuelGlobalSummary;
 }

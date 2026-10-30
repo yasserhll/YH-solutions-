@@ -23,13 +23,16 @@ import {
 } from 'lucide-react';
 import { api, apiErrorMessage, downloadFile, uploadErrorMessage } from '../api/client';
 import { useFuelSite } from '../hooks/useFuelSite';
-import type { FuelAssignment, FuelDailyReport, FuelReportVehicle } from '../types';
+import type { FuelAssignment, FuelBrand, FuelDailyReport, FuelReportVehicle } from '../types';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { SearchInput } from '../components/ui/SearchInput';
 import { EmptyState, LoadingState } from '../components/ui/States';
 import { SelectField, TextField } from '../components/ui/Field';
+
+const brandLabels: Record<FuelBrand, string> = { sinotruk: 'Sinotruk', man: 'MAN', renault: 'Renault' };
+const brandHint = (b: FuelBrand) => (b === 'sinotruk' ? 'heures, L/h' : 'km, L/100 km');
 
 // Consommation > Rapport: the daily "CONSOMMATION JOURNALIERE DE GASOIL"
 // (camions D… + engins E… only), ALWAYS generated from the Global (the same
@@ -508,6 +511,7 @@ function AssignmentsView({ siteFilter, assignments }: { siteFilter: { site_id?: 
                     <thead>
                       <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:text-slate-500">
                         <th className="px-4 py-2.5 font-medium">Code</th>
+                        {category === 'camion' && <th className="px-4 py-2.5 font-medium">Marque</th>}
                         <th className="px-4 py-2.5 font-medium">Équipe 1</th>
                         <th className="px-4 py-2.5 font-medium">Équipe 2</th>
                         <th className="px-4 py-2.5 font-medium">Remplaçants</th>
@@ -521,6 +525,16 @@ function AssignmentsView({ siteFilter, assignments }: { siteFilter: { site_id?: 
                           <td className="px-4 py-2.5">
                             <span className="rounded-md bg-slate-900 px-2 py-0.5 font-mono text-xs font-bold text-white dark:bg-white dark:text-slate-900">{a.label ?? a.code}</span>
                           </td>
+                          {category === 'camion' && (
+                            <td className="whitespace-nowrap px-4 py-2.5 text-xs">
+                              {a.brand ? (
+                                <span className="font-medium text-slate-700 dark:text-slate-300">{brandLabels[a.brand]}</span>
+                              ) : (
+                                <span className="text-slate-400 dark:text-slate-500">{brandLabels[a.default_brand]} (par défaut)</span>
+                              )}
+                              <span className="ml-1 text-slate-400 dark:text-slate-500">· {brandHint(a.brand ?? a.default_brand)}</span>
+                            </td>
+                          )}
                           <td className="px-4 py-2.5 text-slate-700 dark:text-slate-300">{a.driver_1 ?? <span className="text-slate-300 dark:text-slate-600">—</span>}</td>
                           <td className="px-4 py-2.5 text-slate-700 dark:text-slate-300">{a.driver_2 ?? <span className="text-slate-300 dark:text-slate-600">—</span>}</td>
                           <td className="px-4 py-2.5 text-xs text-slate-500 dark:text-slate-400">{a.replacements ?? ''}</td>
@@ -567,6 +581,7 @@ function AssignmentFormModal({ assignment, siteFilter, onClose }: { assignment: 
     driver_2: assignment?.driver_2 ?? '',
     replacements: assignment?.replacements ?? '',
     activity: assignment?.activity ?? '',
+    brand: assignment?.brand ?? '',
   });
   const set = (key: keyof typeof form) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
@@ -606,6 +621,16 @@ function AssignmentFormModal({ assignment, siteFilter, onClose }: { assignment: 
             <option value="camion">Camion</option>
             <option value="engin">Engin</option>
           </SelectField>
+          {form.category === 'camion' && (
+            <div className="sm:col-span-2">
+              <SelectField label="Marque" value={form.brand} onChange={set('brand')}>
+                <option value="">Par défaut du site{assignment ? ` (${brandLabels[assignment.default_brand]})` : ''}</option>
+                <option value="sinotruk">Sinotruk — heures (litres / heures)</option>
+                <option value="man">MAN — km (litres / km × 100)</option>
+                <option value="renault">Renault — km (litres / km × 100)</option>
+              </SelectField>
+            </div>
+          )}
           <TextField label="Équipe 1" value={form.driver_1} onChange={set('driver_1')} />
           <TextField label="Équipe 2" value={form.driver_2} onChange={set('driver_2')} />
           <TextField label="Remplaçants" value={form.replacements} onChange={set('replacements')} />
