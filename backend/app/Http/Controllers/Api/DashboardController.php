@@ -110,7 +110,8 @@ class DashboardController extends Controller
                 'warnings' => (clone $warnings)->count(),
                 'suspensions' => (clone $suspensions)->count(),
             ],
-            'cash' => [
+            // No Caisse session = no cash numbers at all, not just a hidden card.
+            'cash' => ! $request->user()->hasModule('caisse') ? null : [
                 // Master balance: SuperAdmin only, never shown to a responsable.
                 // Never reduced by a transfer — only entries/expenses move it.
                 'current_balance' => $isSuperAdmin ? round(CashAccount::singleton()->currentBalance(), 2) : null,

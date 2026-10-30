@@ -14,9 +14,9 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
  * their own assigned sites — a scoped, HSE-only alternative to the full
  * `/users` endpoint, which stays SuperAdmin-only. A SuperAdmin can also use
  * this (unrestricted, like everywhere else), but normally manages accounts
- * via the main Utilisateurs page instead. Route access (only `hse`,
- * `responsable_hse`, SuperAdmin reach this controller at all) is enforced by
- * the `hse.access` middleware in routes/api.php; the narrower "only a
+ * via the main Utilisateurs page instead. Route access (accounts given the
+ * HSE session) is enforced by the `module:hse` middleware in
+ * routes/api.php; the narrower "only a
  * responsable_hse/SuperAdmin, not an hse itself, may manage accounts" rule
  * is enforced here via ensureManager().
  */

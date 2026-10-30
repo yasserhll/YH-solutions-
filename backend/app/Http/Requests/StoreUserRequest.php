@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use App\Models\User;
 use Illuminate\Validation\Rule;
 
 class StoreUserRequest extends FormRequest
@@ -30,6 +31,9 @@ class StoreUserRequest extends FormRequest
             'site_ids' => $isSuperAdmin ? ['sometimes', 'array'] : ['required', 'array', 'min:1'],
             'site_ids.*' => ['integer', 'exists:sites,id'],
             'is_active' => ['sometimes', 'boolean'],
+            // Sessions chosen for this account; null/absent = the role's default.
+            'modules' => ['nullable', 'array'],
+            'modules.*' => ['string', Rule::in(User::MODULES)],
         ];
     }
 }

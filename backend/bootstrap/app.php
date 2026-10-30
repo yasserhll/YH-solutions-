@@ -14,9 +14,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'superadmin' => \App\Http\Middleware\EnsureSuperAdmin::class,
-            'hse.access' => \App\Http\Middleware\EnsureHseModuleAccess::class,
-            'hse.block' => \App\Http\Middleware\BlockHseModuleRoles::class,
-            'hse.block-animateur' => \App\Http\Middleware\BlockHseAnimateurRole::class,
+            'module' => \App\Http\Middleware\EnsureModuleAccess::class,
         ]);
 
         $middleware->api(prepend: [

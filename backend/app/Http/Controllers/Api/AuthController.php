@@ -56,6 +56,8 @@ class AuthController extends Controller
             'name' => $user->name,
             'email' => $user->email,
             'role' => $user->role,
+            // Sessions this account can open (sidebar + route guards follow it).
+            'allowed_modules' => $user->allowedModules(),
             'site' => $user->site
                 ? ['id' => $user->site->id, 'name' => $user->site->name, 'slug' => $user->site->slug]
                 : null,

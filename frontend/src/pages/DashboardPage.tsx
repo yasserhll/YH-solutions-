@@ -7,6 +7,8 @@ import { LoadingState } from '../components/ui/States';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { DonutStat } from '../components/ui/DonutStat';
 import { SegmentedBar } from '../components/ui/SegmentedBar';
+import { useAuth } from '../contexts/AuthContext';
+import { hasModule } from '../utils/modules';
 
 function money(n: number) {
   return new Intl.NumberFormat('fr-MA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n) + ' DH';
@@ -14,6 +16,7 @@ function money(n: number) {
 
 export default function DashboardPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const siteParams = useSiteParams();
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard', siteParams],
@@ -35,6 +38,7 @@ export default function DashboardPage() {
               "non pointé" bucket, since a normal day defaults to présent and
               a Sunday/holiday defaults to absent unless manually corrected
               (see DashboardController@index and AttendanceController::daily). */}
+          {hasModule(user, 'pointage') && (
           <DonutStat
             title="Pointage du jour"
             segments={[
@@ -42,7 +46,9 @@ export default function DashboardPage() {
               { name: 'Absents', value: data.personnel.absent_today, color: '#ef4444', to: '/pointage?status=absent' },
             ]}
           />
+          )}
 
+          {hasModule(user, 'conges') && (
           <SegmentedBar
             title="Congés"
             subtitle={`${data.leaves.pending + data.leaves.accepted + data.leaves.refused + data.leaves.cancelled + data.leaves.in_progress + data.leaves.completed} dossiers suivis`}
@@ -55,7 +61,9 @@ export default function DashboardPage() {
               { name: 'Terminés', value: data.leaves.completed, color: '#64748b', to: '/conges?tab=conges-en-cours&status=termine' },
             ]}
           />
+          )}
 
+          {hasModule(user, 'sanctions') && (
           <DonutStat
             title="Sanctions"
             segments={[
@@ -63,7 +71,9 @@ export default function DashboardPage() {
               { name: 'Mises à pied', value: data.sanctions.suspensions, color: '#ef4444', to: '/sanctions?tab=mises-a-pied' },
             ]}
           />
+          )}
 
+          {hasModule(user, 'mouvements') && (
           <SegmentedBar
             title="Mouvements de personnel"
             subtitle={`${totalMovements30d} mouvements sur les 30 derniers jours`}
@@ -72,9 +82,12 @@ export default function DashboardPage() {
               { name: 'Sorties', value: data.personnel.recent_exits_30d, color: '#f59e0b', to: '/mouvements?tab=sorties' },
             ]}
           />
+          )}
         </div>
       </section>
 
+      {/* null when the account has no Caisse session (DashboardController). */}
+      {data.cash && (
       <section>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
@@ -119,6 +132,7 @@ export default function DashboardPage() {
           </div>
         </div>
       </section>
+      )}
     </div>
   );
 }

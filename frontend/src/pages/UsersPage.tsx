@@ -4,7 +4,21 @@ import toast from 'react-hot-toast';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { api, apiErrorMessage } from '../api/client';
 import { useSites } from '../hooks/useReferenceData';
-import type { Role, User } from '../types';
+import type { ModuleKey, Role, User } from '../types';
+import { MODULES } from '../utils/modules';
+
+/** GET /users/modules: each role's default sessions (User::ROLE_MODULES). */
+type ModulesCatalog = { modules: ModuleKey[]; role_defaults: Partial<Record<Role, ModuleKey[]>> };
+
+function useModulesCatalog() {
+  return useQuery({
+    queryKey: ['users', 'modules'],
+    queryFn: () => api.get<ModulesCatalog>('/users/modules').then((r) => r.data),
+    staleTime: Infinity,
+  });
+}
+
+const sameModules = (a: ModuleKey[], b: ModuleKey[]) => a.length === b.length && a.every((m) => b.includes(m));
 
 const roleLabels: Record<Role, string> = {
   superadmin: 'SuperAdmin',
@@ -52,6 +66,18 @@ export default function UsersPage() {
         return u.sites.map((s) => s.name).join(', ');
       },
     },
+    {
+      header: 'Sessions',
+      accessor: (u) =>
+        u.role === 'superadmin' ? (
+          <span className="text-xs text-slate-500 dark:text-slate-400">Accès complet</span>
+        ) : (
+          <span className="text-xs text-slate-500 dark:text-slate-400" title={MODULES.filter((m) => u.allowed_modules.includes(m.key)).map((m) => m.label).join(', ')}>
+            {u.allowed_modules.length} / {MODULES.length}
+            {u.modules === null ? ' · par défaut' : ' · personnalisé'}
+          </span>
+        ),
+    },
     { header: 'Statut', accessor: (u) => <StatusBadge status={u.is_active ? 'actif' : 'sorti'} /> },
     {
       header: 'Actions',
@@ -75,7 +101,7 @@ export default function UsersPage() {
     <div>
       <PageHeader
         title="Utilisateurs"
-        description="Gestion des comptes SuperAdmin et responsables de site"
+        description="Comptes, sites assignés et sessions accessibles de chaque compte"
         actions={
           <Button onClick={() => setEditing(null)}>
             <Plus size={16} /> Ajouter un utilisateur
@@ -104,6 +130,11 @@ export default function UsersPage() {
 function UserFormModal({ user, onClose }: { user: User | null; onClose: () => void }) {
   const queryClient = useQueryClient();
   const { data: sites } = useSites();
+  const { data: catalog } = useModulesCatalog();
+  const roleDefault = (role: Role): ModuleKey[] => catalog?.role_defaults[role] ?? [];
+  // null = still following the role's default (a role change then switches
+  // to the new role's default); a list = ticked by hand for this account.
+  const [customModules, setCustomModules] = useState<ModuleKey[] | null>(user?.modules ?? null);
   const [form, setForm] = useState({
     name: user?.name ?? '',
     email: user?.email ?? '',
@@ -112,6 +143,12 @@ function UserFormModal({ user, onClose }: { user: User | null; onClose: () => vo
     site_ids: user?.sites.map((s) => s.id) ?? ([] as number[]),
     is_active: user?.is_active ?? true,
   });
+  const modules = customModules ?? roleDefault(form.role);
+
+  function toggleModule(key: ModuleKey) {
+    const next = modules.includes(key) ? modules.filter((m) => m !== key) : [...modules, key];
+    setCustomModules(sameModules(next, roleDefault(form.role)) ? null : next);
+  }
 
   function toggleSite(id: number) {
     setForm((f) => ({
@@ -126,7 +163,13 @@ function UserFormModal({ user, onClose }: { user: User | null; onClose: () => vo
     // backend never has to guess whether an empty array here was
     // intentional.
     mutationFn: () => {
-      const payload = { ...form, site_ids: form.role === 'superadmin' ? [] : form.site_ids };
+      // A list equal to the role's default is stored as null server-side
+      // (UserController::normalizeModules), so the account keeps following it.
+      const payload = {
+        ...form,
+        site_ids: form.role === 'superadmin' ? [] : form.site_ids,
+        modules: form.role === 'superadmin' ? null : (customModules ?? roleDefault(form.role)),
+      };
       return user ? api.put(`/users/${user.id}`, payload) : api.post('/users', payload);
     },
     onSuccess: () => {
@@ -175,9 +218,38 @@ function UserFormModal({ user, onClose }: { user: User | null; onClose: () => vo
               ))}
             </div>
             <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-              {form.role === 'hse' || form.role === 'responsable_hse'
-                ? "Ce compte n'a accès qu'au module Rapports HSE, restreint aux sites assignés ci-dessus — rien d'autre dans l'application."
-                : 'Un responsable avec plusieurs sites travaille sur tous ces sites à la fois (dépenses, tableaux de bord, rapports...) et choisit le site concerné à chaque enregistrement.'}
+              Un compte avec plusieurs sites travaille sur tous ces sites à la fois (dépenses, tableaux de bord, rapports...) et choisit le site concerné à chaque enregistrement.
+            </p>
+          </div>
+        )}
+        {form.role === 'superadmin' ? (
+          <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
+            Un SuperAdmin a toujours accès à toutes les sessions.
+          </p>
+        ) : (
+          <div>
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                Sessions accessibles {modules.length === 0 && <span className="text-red-500">(aucune)</span>}
+              </span>
+              {customModules !== null && (
+                <button type="button" onClick={() => setCustomModules(null)} className="text-xs font-medium text-sky-600 hover:underline dark:text-sky-400">
+                  Rétablir les accès par défaut
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-1 gap-1.5 rounded-lg border border-slate-300 p-2.5 sm:grid-cols-2 dark:border-slate-600">
+              {MODULES.map((m) => (
+                <label key={m.key} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                  <input type="checkbox" checked={modules.includes(m.key)} onChange={() => toggleModule(m.key)} disabled={!catalog} />
+                  {m.label}
+                </label>
+              ))}
+            </div>
+            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+              {customModules === null
+                ? `Accès par défaut du rôle « ${roleLabels[form.role]} ». Décochez une session pour la retirer, cochez-en une pour l'ouvrir à ce compte.`
+                : 'Accès personnalisés pour ce compte. Les données restent limitées aux sites assignés.'}
             </p>
           </div>
         )}

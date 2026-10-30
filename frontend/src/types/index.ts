@@ -29,11 +29,29 @@ export interface Holiday {
   name: string;
 }
 
+/** A session of the app an account can be given (User::MODULES on the backend). */
+export type ModuleKey =
+  | 'dashboard'
+  | 'pointage'
+  | 'conges'
+  | 'sanctions'
+  | 'hse'
+  | 'mouvements'
+  | 'affectations'
+  | 'heures_sup'
+  | 'caisse'
+  | 'consommation'
+  | 'personnel'
+  | 'rapports'
+  | 'historique';
+
 export interface AuthUser {
   id: number;
   name: string;
   email: string;
   role: Role;
+  /** Sessions this account can open: everything for a SuperAdmin, else its custom list or its role's default. */
+  allowed_modules: ModuleKey[];
   /** Only set when this user has exactly one assigned site — null otherwise (multi-site or superadmin). */
   site: Site | null;
   /** Every site assigned to this user, usable simultaneously — a superadmin gets []. */
@@ -42,6 +60,8 @@ export interface AuthUser {
 
 export interface User extends AuthUser {
   is_active: boolean;
+  /** Sessions a SuperAdmin picked for this account; null = its role's default. */
+  modules: ModuleKey[] | null;
 }
 
 export type EmployeeStatus = 'actif' | 'sorti';
@@ -470,6 +490,7 @@ export interface DashboardData {
     warnings: number;
     suspensions: number;
   };
+  /** null when the account has no Caisse session. */
   cash: {
     current_balance: number | null;
     site_balances: CashAccountSiteSummary[] | null;
@@ -477,7 +498,7 @@ export interface DashboardData {
     expenses_month: number;
     total_expenses: number;
     recent_operations: CashTransaction[];
-  };
+  } | null;
 }
 
 // --- Consommation (fuel) ---

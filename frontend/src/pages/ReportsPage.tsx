@@ -14,9 +14,12 @@ import type {
   LeaveRequest,
   OvertimeEntry,
   OvertimeMonth,
+  ModuleKey,
   Paginated,
   Suspension,
 } from '../types';
+import { useAuth } from '../contexts/AuthContext';
+import { hasModule } from '../utils/modules';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Button';
 import { DataTable, type Column } from '../components/ui/DataTable';
@@ -24,6 +27,17 @@ import { StatusBadge } from '../components/ui/StatusBadge';
 import { hoursLabel, periodLabel } from '../utils/overtime';
 
 const tabs = ['Pointage', 'Congés', 'Sanctions', 'Entrées / Sorties', 'Heures sup.', 'Caisse'] as const;
+
+// Each tab is the report of one session: an account only sees the tabs of
+// the sessions it was given (its API calls would 403 otherwise).
+const tabModules: Record<(typeof tabs)[number], ModuleKey> = {
+  Pointage: 'pointage',
+  Congés: 'conges',
+  Sanctions: 'sanctions',
+  'Entrées / Sorties': 'mouvements',
+  'Heures sup.': 'heures_sup',
+  Caisse: 'caisse',
+};
 
 const exportEndpoints: Record<(typeof tabs)[number], { url: string; filename: string }> = {
   Pointage: { url: '/reports/attendance/export', filename: 'pointage.xlsx' },
@@ -35,7 +49,9 @@ const exportEndpoints: Record<(typeof tabs)[number], { url: string; filename: st
 };
 
 export default function ReportsPage() {
-  const [tab, setTab] = useState<(typeof tabs)[number]>('Pointage');
+  const { user } = useAuth();
+  const visibleTabs = tabs.filter((t) => hasModule(user, tabModules[t]));
+  const [tab, setTab] = useState<(typeof tabs)[number]>(visibleTabs[0] ?? 'Pointage');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const siteParams = useSiteParams();
@@ -52,13 +68,13 @@ export default function ReportsPage() {
   const attendanceQuery = useQuery({
     queryKey: ['report-attendance', siteParams, period],
     queryFn: () => api.get<Paginated<Attendance>>('/reports/attendance', { params: { ...siteParams, ...period } }).then((r) => r.data),
-    enabled: tab === 'Pointage',
+    enabled: tab === 'Pointage' && hasModule(user, tabModules[tab]),
   });
 
   const leavesQuery = useQuery({
     queryKey: ['report-leaves', siteParams, period],
     queryFn: () => api.get<Paginated<LeaveRequest>>('/reports/leaves', { params: { ...siteParams, ...period } }).then((r) => r.data),
-    enabled: tab === 'Congés',
+    enabled: tab === 'Congés' && hasModule(user, tabModules[tab]),
   });
 
   const sanctionsQuery = useQuery({
@@ -67,14 +83,14 @@ export default function ReportsPage() {
       api
         .get<Array<(DisciplinaryWarning | Suspension) & { type: string }>>('/reports/sanctions', { params: { ...siteParams, ...period } })
         .then((r) => r.data),
-    enabled: tab === 'Sanctions',
+    enabled: tab === 'Sanctions' && hasModule(user, tabModules[tab]),
   });
 
   const movementsQuery = useQuery({
     queryKey: ['report-movements', siteParams, period],
     queryFn: () =>
       api.get<{ entries: Entry[]; exits: Exit[] }>('/reports/movements', { params: { ...siteParams, ...period } }).then((r) => r.data),
-    enabled: tab === 'Entrées / Sorties',
+    enabled: tab === 'Entrées / Sorties' && hasModule(user, tabModules[tab]),
   });
 
   const overtimeQuery = useQuery({
@@ -83,13 +99,13 @@ export default function ReportsPage() {
       api
         .get<{ entries: OvertimeEntry[]; months: OvertimeMonth[] }>('/reports/overtime', { params: { ...siteParams, ...period } })
         .then((r) => r.data),
-    enabled: tab === 'Heures sup.',
+    enabled: tab === 'Heures sup.' && hasModule(user, tabModules[tab]),
   });
 
   const cashQuery = useQuery({
     queryKey: ['report-cash', siteParams, period],
     queryFn: () => api.get<Paginated<CashTransaction>>('/reports/cash', { params: { ...siteParams, ...period } }).then((r) => r.data),
-    enabled: tab === 'Caisse',
+    enabled: tab === 'Caisse' && hasModule(user, tabModules[tab]),
   });
 
   const attendanceColumns: Column<Attendance>[] = [
@@ -168,8 +184,14 @@ export default function ReportsPage() {
     <div>
       <PageHeader title="Rapports" description="Filtrer et consulter l'historique par module" />
 
+      {visibleTabs.length === 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+          Aucun rapport disponible : ce compte n'a accès à aucune des sessions concernées.
+        </div>
+      )}
+
       <div className="mb-4 flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800">
-        {tabs.map((t) => (
+        {visibleTabs.map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}

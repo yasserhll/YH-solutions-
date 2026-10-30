@@ -20,9 +20,9 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
  * plus one extra visibility rule on top: an `hse` account only ever sees ITS
  * OWN reports (they file the report, they don't audit their peers' — that's
  * the `responsable_hse`'s job), while `responsable_hse`/SuperAdmin see every
- * report across the sites they can access. Route access itself (only `hse`,
- * `responsable_hse`, and SuperAdmin ever reach this controller at all) is
- * enforced by the `hse.access` middleware in routes/api.php, not here.
+ * report across the sites they can access. Route access itself (accounts
+ * given the HSE session — by default `hse`, `responsable_hse`, SuperAdmin) is
+ * enforced by the `module:hse` middleware in routes/api.php, not here.
  */
 class HseReportController extends Controller
 {
@@ -53,7 +53,7 @@ class HseReportController extends Controller
 
     /**
      * A simplified, chart-first view for `hse`/`responsable_hse` — the HSE
-     * module has no access to the main Dashboard (see BlockHseModuleRoles),
+     * roles have no Dashboard session by default (User::ROLE_MODULES),
      * so this is their equivalent: KPI totals, a Conforme/Non conforme
      * split, a daily trend, and (only meaningful for a multi-site
      * responsable_hse/SuperAdmin) a per-site comparison. Same visibility
@@ -179,7 +179,10 @@ class HseReportController extends Controller
     {
         $user = $request->user();
 
-        if (! $user->isHse() && ! $user->isSuperAdmin()) {
+        // A responsable_hse reviews reports, it doesn't file them. Any other
+        // account given the HSE session (an animateur, a SuperAdmin, or e.g. a
+        // responsable a SuperAdmin opened it to) may file one.
+        if ($user->isResponsableHse()) {
             throw new HttpException(403, 'Seul un animateur HSE peut saisir ce rapport.');
         }
 

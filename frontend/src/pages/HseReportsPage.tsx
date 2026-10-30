@@ -117,7 +117,8 @@ export default function HseReportsPage() {
             : 'Rapports journaliers HSE saisis par les animateurs de vos sites'
         }
         actions={
-          (isHse || user?.role === 'superadmin') && (
+          // Same rule as HseReportController::store: a responsable_hse reviews, every other account with this session may file.
+          user?.role !== 'responsable_hse' && (
             <Button onClick={() => setShowForm(true)}>
               <Plus size={16} /> Nouveau rapport
             </Button>

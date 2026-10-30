@@ -32,7 +32,8 @@ import { useSiteFilter } from '../contexts/SiteFilterContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
-import type { Site } from '../types';
+import type { AuthUser, ModuleKey, Site } from '../types';
+import { hasModule, isHseRole } from '../utils/modules';
 import { Brand } from '../components/ui/Brand';
 
 function dropdownOptionClass(active: boolean) {
@@ -47,74 +48,53 @@ function dropdownOptionClass(active: boolean) {
 const SUPPORT_EMAIL = 'Hallajiyasser@gmail.com';
 const SUPPORT_MAILTO = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Support - Solution Administrative')}`;
 
-// `hse`/`responsable_hse` never see anything here except "Rapports HSE",
-// which is superadminOnly-gated below — a plain `responsable` never sees it
-// at all. Everything else is a SuperAdmin/responsable-only module, enforced
-// server-side by `hse.block` (or `hse.block-animateur` for the five modules
-// a responsable_hse also gets — see hseModuleNavItems below).
-const navItems = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/pointage', label: 'Pointage', icon: Clock },
-  { to: '/conges', label: 'Congés', icon: CalendarDays },
-  { to: '/sanctions', label: 'Sanctions', icon: ShieldAlert },
-  // Sits directly under Sanctions for a SuperAdmin, per request — points
-  // straight at the reports list, not the HSE mini-dashboard (that's a
-  // simplified view for hse/responsable_hse, not needed by a SuperAdmin who
-  // already has the full Dashboard).
-  { to: '/hse/rapports', label: 'Rapports HSE', icon: HardHat, superadminOnly: true },
-  { to: '/mouvements', label: 'Entrées / Sorties', icon: ArrowLeftRight },
-  { to: '/affectations', label: 'Affectations', icon: Briefcase },
-  { to: '/heures-supplementaires', label: 'Heures supplémentaires', icon: Timer },
-  { to: '/caisse', label: 'Caisse', icon: Wallet },
-  { to: '/consommation', label: 'Consommation', icon: Fuel },
-  { to: '/personnel', label: 'Personnel', icon: Users },
-];
-
-// Grouped under the single "Paramètres" sidebar entry instead of three
-// separate top-level links — clicking it expands this list in place rather
-// than navigating anywhere itself. "Rapports" stays visible to everyone
-// (a plain responsable already had it); Utilisateurs/Paramètres stay
-// superadminOnly, same restriction as before, just relocated.
-const settingsNavItems = [
-  { to: '/utilisateurs', label: 'Utilisateurs', icon: UserCog, superadminOnly: true },
-  { to: '/rapports', label: 'Rapports', icon: FileBarChart },
-  { to: '/historique', label: 'Historique', icon: History },
-  { to: '/parametres', label: 'Paramètres', icon: Settings, superadminOnly: true },
-];
+type NavItem = { to: string; label: string; icon: LucideIcon; end?: boolean; module?: ModuleKey; show?: boolean };
 
 /**
- * `hse` sees only its own dashboard + report entry — strictly the HSE
- * module. `responsable_hse` additionally gets Pointage/Congés/Sanctions/
- * Entrées-Sorties/Affectations (safety oversight across their sites, backed
- * server-side by `hse.block-animateur` — an `hse` account 403s on all five)
- * and "Comptes animateurs" (an `hse` account files reports, it doesn't
- * manage other accounts). "Rapports HSE" sits right after Sanctions here
- * too, mirroring the SuperAdmin's sidebar placement above.
+ * One sidebar for every account, filtered by its sessions (user.allowed_modules
+ * — everything for a SuperAdmin, otherwise what a SuperAdmin picked in
+ * Utilisateurs, or the role's default). The backend's `module:<key>`
+ * middleware is the real enforcement; this only hides what would 403.
+ * An hse / responsable_hse account opens the HSE mini-dashboard first; the
+ * others reach HSE through "Rapports HSE" (right under Sanctions).
  */
-type NavItem = { to: string; label: string; icon: LucideIcon; end?: boolean; superadminOnly?: boolean };
+function navItemsFor(user: AuthUser | null): NavItem[] {
+  const hseRole = isHseRole(user);
+  const items: NavItem[] = [
+    { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true, module: 'dashboard' },
+    { to: '/hse', label: 'Tableau de bord HSE', icon: LayoutDashboard, end: true, module: 'hse', show: hseRole },
+    { to: '/pointage', label: 'Pointage', icon: Clock, module: 'pointage' },
+    { to: '/conges', label: 'Congés', icon: CalendarDays, module: 'conges' },
+    { to: '/sanctions', label: 'Sanctions', icon: ShieldAlert, module: 'sanctions' },
+    { to: '/hse/rapports', label: 'Rapports HSE', icon: HardHat, module: 'hse' },
+    { to: '/mouvements', label: 'Entrées / Sorties', icon: ArrowLeftRight, module: 'mouvements' },
+    { to: '/affectations', label: 'Affectations', icon: Briefcase, module: 'affectations' },
+    { to: '/heures-supplementaires', label: 'Heures supplémentaires', icon: Timer, module: 'heures_sup' },
+    { to: '/caisse', label: 'Caisse', icon: Wallet, module: 'caisse' },
+    { to: '/consommation', label: 'Consommation', icon: Fuel, module: 'consommation' },
+    { to: '/personnel', label: 'Personnel', icon: Users, module: 'personnel' },
+    // An hse account files reports, it doesn't manage other accounts.
+    { to: '/hse/utilisateurs', label: 'Comptes animateurs', icon: UserCog, module: 'hse', show: user?.role === 'responsable_hse' },
+  ];
 
-function hseModuleNavItems(isResponsableHse: boolean): NavItem[] {
-  const items: NavItem[] = [{ to: '/hse', label: 'Tableau de bord HSE', icon: LayoutDashboard, end: true }];
+  return items.filter((item) => item.show !== false && (!item.module || hasModule(user, item.module)));
+}
 
-  if (isResponsableHse) {
-    items.push(
-      { to: '/pointage', label: 'Pointage', icon: Clock },
-      { to: '/conges', label: 'Congés', icon: CalendarDays },
-      { to: '/sanctions', label: 'Sanctions', icon: ShieldAlert },
-    );
-  }
+// Grouped under the single "Paramètres" sidebar entry instead of separate
+// top-level links — clicking it expands this list in place rather than
+// navigating anywhere itself. Utilisateurs/Paramètres are SuperAdmin-only;
+// Rapports/Historique follow the account's sessions. The whole group is
+// hidden when none of its entries is left (e.g. an hse account).
+function settingsNavItemsFor(user: AuthUser | null): NavItem[] {
+  const isSuperAdmin = user?.role === 'superadmin';
+  const items: NavItem[] = [
+    { to: '/utilisateurs', label: 'Utilisateurs', icon: UserCog, show: isSuperAdmin },
+    { to: '/rapports', label: 'Rapports', icon: FileBarChart, module: 'rapports' },
+    { to: '/historique', label: 'Historique', icon: History, module: 'historique' },
+    { to: '/parametres', label: 'Paramètres', icon: Settings, show: isSuperAdmin },
+  ];
 
-  items.push({ to: '/hse/rapports', label: 'Rapports HSE', icon: HardHat });
-
-  if (isResponsableHse) {
-    items.push(
-      { to: '/mouvements', label: 'Entrées / Sorties', icon: ArrowLeftRight },
-      { to: '/affectations', label: 'Affectations', icon: Briefcase },
-      { to: '/hse/utilisateurs', label: 'Comptes animateurs', icon: UserCog },
-    );
-  }
-
-  return items;
+  return items.filter((item) => item.show !== false && (!item.module || hasModule(user, item.module)));
 }
 
 const roleLabels: Record<string, string> = {
@@ -135,11 +115,9 @@ export function DashboardLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [desktopOpen, setDesktopOpen] = useState(true);
   const isSuperAdmin = user?.role === 'superadmin';
-  const isResponsableHse = user?.role === 'responsable_hse';
-  const isHseOnly = user?.role === 'hse' || isResponsableHse;
 
   const location = useLocation();
-  const visibleSettingsItems = settingsNavItems.filter((item) => !item.superadminOnly || isSuperAdmin);
+  const visibleSettingsItems = settingsNavItemsFor(user);
   // Starts expanded when already sitting on one of its own pages (e.g. a
   // reload on /rapports), so the active link isn't hidden behind a click.
   const [settingsOpen, setSettingsOpen] = useState(() => visibleSettingsItems.some((item) => location.pathname.startsWith(item.to)));
@@ -186,31 +164,28 @@ export function DashboardLayout() {
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto p-3">
-          {(isHseOnly ? hseModuleNavItems(isResponsableHse) : navItems)
-            .filter((item) => !('superadminOnly' in item && item.superadminOnly) || isSuperAdmin)
-            .map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.end}
-                onClick={() => setMobileOpen(false)}
-                className={({ isActive }) =>
-                  clsx(
-                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                    isActive
-                      ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
-                  )
-                }
-              >
-                <item.icon size={18} />
-                {item.label}
-              </NavLink>
-            ))}
+          {navItemsFor(user).map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              onClick={() => setMobileOpen(false)}
+              className={({ isActive }) =>
+                clsx(
+                  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                  isActive
+                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
+                )
+              }
+            >
+              <item.icon size={18} />
+              {item.label}
+            </NavLink>
+          ))}
 
-          {/* Utilisateurs/Rapports/Paramètres collapsed into one entry — not
-              part of the HSE module, so hidden for hse/responsable_hse. */}
-          {!isHseOnly && (
+          {/* Utilisateurs/Rapports/Historique/Paramètres collapsed into one entry. */}
+          {visibleSettingsItems.length > 0 && (
             <div>
               <button
                 type="button"

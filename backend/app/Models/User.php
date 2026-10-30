@@ -20,7 +20,28 @@ class User extends Authenticatable
         'email',
         'password',
         'role',
+        'modules',
         'is_active',
+    ];
+
+    /**
+     * Every session (module) an account can be given, in sidebar order.
+     * Each one gates its own API routes (`module:<key>` middleware,
+     * EnsureModuleAccess) and its own pages/sidebar entry on the frontend.
+     */
+    public const MODULES = [
+        'dashboard', 'pointage', 'conges', 'sanctions', 'hse', 'mouvements', 'affectations',
+        'heures_sup', 'caisse', 'consommation', 'personnel', 'rapports', 'historique',
+    ];
+
+    /**
+     * What each role gets when no custom list was chosen (users.modules null)
+     * — exactly the access every role had before per-account sessions existed.
+     */
+    public const ROLE_MODULES = [
+        'responsable' => ['dashboard', 'pointage', 'conges', 'sanctions', 'mouvements', 'affectations', 'heures_sup', 'caisse', 'consommation', 'personnel', 'rapports', 'historique'],
+        'responsable_hse' => ['pointage', 'conges', 'sanctions', 'hse', 'mouvements', 'affectations'],
+        'hse' => ['hse'],
     ];
 
     protected $hidden = [
@@ -35,7 +56,7 @@ class User extends Authenticatable
      * single-site responsable — a multi-site one has no one "current" site
      * any more (see [[sites]]), so this is null for them and for a superadmin.
      */
-    protected $appends = ['site'];
+    protected $appends = ['site', 'allowed_modules'];
 
     protected function casts(): array
     {
@@ -43,6 +64,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_active' => 'boolean',
+            'modules' => 'array',
         ];
     }
 
@@ -61,6 +83,35 @@ class User extends Authenticatable
         return $this->belongsToMany(Site::class, 'site_user');
     }
 
+    /**
+     * The sessions this account can actually use: a SuperAdmin always has
+     * every one (full control, never restricted); anyone else gets the list a
+     * SuperAdmin picked for them, or their role's default when none was.
+     *
+     * @return array<int, string>
+     */
+    public function allowedModules(): array
+    {
+        if ($this->isSuperAdmin()) {
+            return self::MODULES;
+        }
+
+        $modules = $this->modules ?? self::ROLE_MODULES[$this->role] ?? [];
+
+        return array_values(array_intersect(self::MODULES, $modules));
+    }
+
+    public function hasModule(string $module): bool
+    {
+        return in_array($module, $this->allowedModules(), true);
+    }
+
+    /** Serialized as `allowed_modules` (the method name allowedModules() is taken by the helper above). */
+    public function getAllowedModulesAttribute(): array
+    {
+        return $this->allowedModules();
+    }
+
     public function isSuperAdmin(): bool
     {
         return $this->role === 'superadmin';
@@ -74,18 +125,6 @@ class User extends Authenticatable
     public function isResponsableHse(): bool
     {
         return $this->role === 'responsable_hse';
-    }
-
-    /**
-     * `hse` and `responsable_hse` are restricted to ONLY the HSE module (see
-     * EnsureHseModuleAccess/BlockHseModuleRoles) — everything else in the
-     * app (Dashboard, Personnel, Pointage, Congés, Caisse...) is off-limits
-     * to them, the mirror image of a SuperAdmin/responsable never seeing the
-     * HSE module.
-     */
-    public function isHseModuleOnly(): bool
-    {
-        return $this->isHse() || $this->isResponsableHse();
     }
 
     /**

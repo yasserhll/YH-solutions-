@@ -6,6 +6,8 @@ import { SiteFilterProvider } from './contexts/SiteFilterContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { PwaStatus } from './components/PwaStatus';
 import { DashboardLayout } from './layouts/DashboardLayout';
+import { hasModule, homePath } from './utils/modules';
+import type { ModuleKey } from './types';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import PersonnelPage from './pages/PersonnelPage';
@@ -44,46 +46,36 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 
 function RequireSuperAdmin({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  if (user?.role !== 'superadmin') return <Navigate to="/" replace />;
+  if (user?.role !== 'superadmin') return <Navigate to={homePath(user) ?? '/'} replace />;
   return <>{children}</>;
 }
 
 /**
- * `hse` and `responsable_hse` are restricted to ONLY the HSE module — every
- * other route redirects them straight to /hse (the backend enforces this the
- * same way via BlockHseModuleRoles, this is just so the UI never shows a
- * blank/403'd page for a route they can't use).
+ * A session the account wasn't given (user.allowed_modules) sends it back to
+ * its own home page instead of a blank/403'd screen. UX only: the backend's
+ * `module:<key>` middleware is what actually refuses the data.
  */
-function RequireFullAccess({ children }: { children: React.ReactNode }) {
+function RequireModule({ module, children }: { module: ModuleKey; children: React.ReactNode }) {
   const { user } = useAuth();
-  if (user && (user.role === 'hse' || user.role === 'responsable_hse')) return <Navigate to="/hse" replace />;
+  if (!hasModule(user, module)) {
+    const home = homePath(user);
+    return home ? <Navigate to={home} replace /> : <NoModules />;
+  }
   return <>{children}</>;
 }
 
-/**
- * Narrower than RequireFullAccess: blocks only `hse` (animateur), not
- * `responsable_hse` — used on Pointage/Congés/Sanctions/Entrées-Sorties/
- * Affectations, which a responsable_hse also gets for safety oversight
- * (backed server-side by the `hse.block-animateur` middleware). An `hse`
- * account stays confined to strictly the HSE module.
- */
-function RequireNotHseAnimateur({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
-  if (user?.role === 'hse') return <Navigate to="/hse" replace />;
-  return <>{children}</>;
-}
-
-/** Mirror of RequireFullAccess: /hse itself is off-limits to a plain responsable. */
-function RequireHseAccess({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
-  if (user && user.role === 'responsable') return <Navigate to="/" replace />;
-  return <>{children}</>;
+function NoModules() {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+      Aucune session n'est ouverte pour ce compte. Contactez un SuperAdmin pour obtenir un accès.
+    </div>
+  );
 }
 
 /** Managing animateur accounts is a responsable_hse (and SuperAdmin) privilege — an `hse` account never sees it. */
 function RequireResponsableHse({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  if (user && user.role !== 'responsable_hse' && user.role !== 'superadmin') return <Navigate to="/hse" replace />;
+  if (user && user.role !== 'responsable_hse' && user.role !== 'superadmin') return <Navigate to={homePath(user) ?? '/'} replace />;
   return <>{children}</>;
 }
 
@@ -108,131 +100,131 @@ export default function App() {
                   <Route
                     path="/"
                     element={
-                      <RequireFullAccess>
+                      <RequireModule module="dashboard">
                         <DashboardPage />
-                      </RequireFullAccess>
+                      </RequireModule>
                     }
                   />
                   <Route
                     path="/pointage"
                     element={
-                      <RequireNotHseAnimateur>
+                      <RequireModule module="pointage">
                         <AttendancePage />
-                      </RequireNotHseAnimateur>
+                      </RequireModule>
                     }
                   />
                   <Route
                     path="/conges"
                     element={
-                      <RequireNotHseAnimateur>
+                      <RequireModule module="conges">
                         <LeavesPage />
-                      </RequireNotHseAnimateur>
+                      </RequireModule>
                     }
                   />
                   <Route
                     path="/sanctions"
                     element={
-                      <RequireNotHseAnimateur>
+                      <RequireModule module="sanctions">
                         <SanctionsPage />
-                      </RequireNotHseAnimateur>
+                      </RequireModule>
                     }
                   />
                   <Route
                     path="/mouvements"
                     element={
-                      <RequireNotHseAnimateur>
+                      <RequireModule module="mouvements">
                         <MovementsPage />
-                      </RequireNotHseAnimateur>
+                      </RequireModule>
                     }
                   />
                   <Route
                     path="/affectations"
                     element={
-                      <RequireNotHseAnimateur>
+                      <RequireModule module="affectations">
                         <AssignmentsPage />
-                      </RequireNotHseAnimateur>
+                      </RequireModule>
                     }
                   />
                   <Route
                     path="/heures-supplementaires"
                     element={
-                      <RequireFullAccess>
+                      <RequireModule module="heures_sup">
                         <OvertimePage />
-                      </RequireFullAccess>
+                      </RequireModule>
                     }
                   />
                   <Route
                     path="/caisse"
                     element={
-                      <RequireFullAccess>
+                      <RequireModule module="caisse">
                         <CashPage />
-                      </RequireFullAccess>
+                      </RequireModule>
                     }
                   />
                   <Route
                     path="/consommation"
                     element={
-                      <RequireFullAccess>
+                      <RequireModule module="consommation">
                         <ConsommationPage />
-                      </RequireFullAccess>
+                      </RequireModule>
                     }
                   />
                   <Route
                     path="/personnel"
                     element={
-                      <RequireFullAccess>
+                      <RequireModule module="personnel">
                         <PersonnelPage />
-                      </RequireFullAccess>
+                      </RequireModule>
                     }
                   />
                   <Route
                     path="/personnel/:id"
                     element={
-                      <RequireFullAccess>
+                      <RequireModule module="personnel">
                         <EmployeeDetailPage />
-                      </RequireFullAccess>
+                      </RequireModule>
                     }
                   />
                   <Route
                     path="/rapports"
                     element={
-                      <RequireFullAccess>
+                      <RequireModule module="rapports">
                         <ReportsPage />
-                      </RequireFullAccess>
+                      </RequireModule>
                     }
                   />
                   <Route
                     path="/historique"
                     element={
-                      <RequireFullAccess>
+                      <RequireModule module="historique">
                         <HistoriquePage />
-                      </RequireFullAccess>
+                      </RequireModule>
                     }
                   />
                   <Route
                     path="/hse"
                     element={
-                      <RequireHseAccess>
+                      <RequireModule module="hse">
                         <HseDashboardPage />
-                      </RequireHseAccess>
+                      </RequireModule>
                     }
                   />
                   <Route
                     path="/hse/rapports"
                     element={
-                      <RequireHseAccess>
+                      <RequireModule module="hse">
                         <HseReportsPage />
-                      </RequireHseAccess>
+                      </RequireModule>
                     }
                   />
                   <Route
                     path="/hse/utilisateurs"
                     element={
-                      <RequireHseAccess>
+                      <RequireModule module="hse">
                         <RequireResponsableHse>
                           <HseUsersPage />
                         </RequireResponsableHse>
-                      </RequireHseAccess>
+                      </RequireModule>
                     }
                   />
                   <Route
