@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\CashAccount;
 use App\Services\CashLedgerService;
-use App\Services\SiteCashPool;
+use App\Services\SiteCashBalances;
 use Illuminate\Http\Request;
 
 /**
@@ -15,9 +15,9 @@ use Illuminate\Http\Request;
  * plus the summary, which includes every site's remaining spending limit
  * (`summary.sites`) — while a responsable gets ONLY the derived limit of
  * each site assigned to them (all of them at once for a multi-site
- * responsable) — never the master balance, never another site's limit. Two
- * of their sites sharing one common caisse (see SiteCashPool) come back as
- * ONE grouped entry, not two identical numbers.
+ * responsable) — never the master balance, never another site's limit. An
+ * account a SuperAdmin set to "caisse fusionnée" gets its sites as ONE
+ * combined entry instead (see SiteCashBalances).
  * `update` (editing initial_balance) stays SuperAdmin-only, per routes/api.php.
  */
 class CashAccountController extends Controller
@@ -38,7 +38,7 @@ class CashAccountController extends Controller
         }
 
         return [
-            'sites' => SiteCashPool::groupedBalances($user->sites->pluck('id')->all()),
+            'sites' => SiteCashBalances::forSites($user->sites->pluck('id')->all(), $user->cash_merged),
         ];
     }
 

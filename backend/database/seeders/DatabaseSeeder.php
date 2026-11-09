@@ -332,16 +332,11 @@ class DatabaseSeeder extends Seeder
             'email' => 'fatima.multisite@transwin-mining.com',
             'password' => Hash::make('password'),
             'role' => 'responsable',
+            // Sees Bouchane + Mzinda's caisses as one combined card (display
+            // only: each site keeps its own caisse, see SiteCashBalances).
+            'cash_merged' => true,
         ]);
         $fatima->sites()->attach([$sites['Bouchane']->id, $sites['Mzinda']->id]);
-
-        // Bouchane and Mzinda's cash transactions above were seeded before
-        // Fatima existed, so their site_running_balance was computed without
-        // pooling yet — recalculate now so the demo data is immediately
-        // correct (a real request would trigger this the same way via
-        // UserController, see recalculateCashPools() there) rather than only
-        // becoming right after the next cash transaction happens to run.
-        $ledger->recalculate($cashAccount);
 
         // HSE module demo accounts — both restricted to ONLY the HSE module
         // (see EnsureHseModuleAccess/BlockHseModuleRoles), never Dashboard/

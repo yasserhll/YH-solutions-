@@ -21,7 +21,12 @@ class User extends Authenticatable
         'password',
         'role',
         'modules',
+        'cash_merged',
         'is_active',
+    ];
+
+    protected $attributes = [
+        'cash_merged' => false,
     ];
 
     /**
@@ -65,6 +70,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'is_active' => 'boolean',
             'modules' => 'array',
+            'cash_merged' => 'boolean',
         ];
     }
 

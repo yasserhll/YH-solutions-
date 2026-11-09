@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Services\SiteCashPool;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -53,10 +52,7 @@ class CashTransaction extends Model
     /**
      * A site's remaining spending limit (not a real pot of money — see
      * CashLedgerService) is derived, never stored independently: it's the
-     * site_running_balance of the most recent transfer/expense row across
-     * every site in $siteId's cash pool (see SiteCashPool) — two or more
-     * sites sharing the same responsable share ONE balance, so the latest
-     * transaction from ANY of them carries the pool's current total,
+     * site_running_balance of that site's most recent transfer/expense row,
      * exactly like CashAccount::currentBalance() derives the master balance
      * from the latest running_balance. reorder() guards against the same
      * trap: any future default ordering on this query would otherwise stack
@@ -65,7 +61,7 @@ class CashTransaction extends Model
     public static function currentSiteBalance(int $siteId): float
     {
         $last = static::query()->reorder()
-            ->whereIn('site_id', SiteCashPool::forSite($siteId))
+            ->where('site_id', $siteId)
             ->whereIn('type', ['transfer', 'expense'])
             ->latest('date')
             ->latest('id')

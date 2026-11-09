@@ -141,9 +141,12 @@ function UserFormModal({ user, onClose }: { user: User | null; onClose: () => vo
     password: '',
     role: (user?.role ?? 'responsable') as Role,
     site_ids: user?.sites.map((s) => s.id) ?? ([] as number[]),
+    cash_merged: user?.cash_merged ?? false,
     is_active: user?.is_active ?? true,
   });
   const modules = customModules ?? roleDefault(form.role);
+  // Merging only means something for an account with several sites and the Caisse session.
+  const canMergeCash = form.role !== 'superadmin' && form.site_ids.length > 1 && modules.includes('caisse');
 
   function toggleModule(key: ModuleKey) {
     const next = modules.includes(key) ? modules.filter((m) => m !== key) : [...modules, key];
@@ -169,6 +172,7 @@ function UserFormModal({ user, onClose }: { user: User | null; onClose: () => vo
         ...form,
         site_ids: form.role === 'superadmin' ? [] : form.site_ids,
         modules: form.role === 'superadmin' ? null : (customModules ?? roleDefault(form.role)),
+        cash_merged: canMergeCash && form.cash_merged,
       };
       return user ? api.put(`/users/${user.id}`, payload) : api.post('/users', payload);
     },
@@ -250,6 +254,17 @@ function UserFormModal({ user, onClose }: { user: User | null; onClose: () => vo
               {customModules === null
                 ? `Accès par défaut du rôle « ${roleLabels[form.role]} ». Décochez une session pour la retirer, cochez-en une pour l'ouvrir à ce compte.`
                 : 'Accès personnalisés pour ce compte. Les données restent limitées aux sites assignés.'}
+            </p>
+          </div>
+        )}
+        {canMergeCash && (
+          <div>
+            <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+              <input type="checkbox" checked={form.cash_merged} onChange={(e) => setForm({ ...form, cash_merged: e.target.checked })} />
+              Caisse fusionnée
+            </label>
+            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+              Ce compte voit les caisses de ses sites en une seule carte (total). Chaque site garde sa propre caisse : une dépense sort toujours de la caisse du site choisi.
             </p>
           </div>
         )}

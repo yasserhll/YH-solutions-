@@ -62,6 +62,8 @@ export interface User extends AuthUser {
   is_active: boolean;
   /** Sessions a SuperAdmin picked for this account; null = its role's default. */
   modules: ModuleKey[] | null;
+  /** Shows this account its sites' caisses as one combined card (display only, each site keeps its own caisse). */
+  cash_merged: boolean;
 }
 
 export type EmployeeStatus = 'actif' | 'sorti';
@@ -395,10 +397,9 @@ export interface CashTransaction {
 }
 
 /**
- * One entry per cash POOL, not per site — two sites sharing one responsable's
- * common caisse (see backend SiteCashPool) collapse into a single entry here,
- * with `site_name` already joined ("Bouchane + Mzinda") and `site_ids`
- * listing every site in that pool.
+ * One entry per site — or, for a "caisse fusionnée" account (see backend
+ * SiteCashBalances), one entry for all its sites, with `site_name` already
+ * joined ("Bouchane + Mzinda"), `site_ids` listing them and `balance` their sum.
  */
 export interface CashAccountSiteSummary {
   site_id: number;

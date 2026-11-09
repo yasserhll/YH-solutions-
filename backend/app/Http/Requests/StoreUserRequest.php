@@ -34,6 +34,7 @@ class StoreUserRequest extends FormRequest
             // Sessions chosen for this account; null/absent = the role's default.
             'modules' => ['nullable', 'array'],
             'modules.*' => ['string', Rule::in(User::MODULES)],
+            'cash_merged' => ['sometimes', 'boolean'],
         ];
     }
 }
