@@ -44,13 +44,21 @@ class AttendanceAutomation
 
         $causes = [];
 
-        Suspension::whereIn('employee_id', $employeeIds)
-            ->whereDate('start_date', '<=', $date)
-            ->whereDate('end_date', '>=', $date)
-            ->get(['employee_id', 'reason', 'description'])
-            ->each(function ($s) use (&$causes) {
-                $causes[$s->employee_id] = ['cause' => 'mise_a_pied', 'description' => $s->description ?? $s->reason];
-            });
+        // A Sunday or a holiday is never a mise à pied day (not counted in
+        // its duration either, see Suspension::endDateForDuration): the day
+        // keeps its normal Sunday/holiday default.
+        $carbonDate = Carbon::parse($date);
+        $isRestDay = Suspension::isRestDay($carbonDate, array_flip(Suspension::holidayDatesFrom($carbonDate, $carbonDate)));
+
+        if (! $isRestDay) {
+            Suspension::whereIn('employee_id', $employeeIds)
+                ->whereDate('start_date', '<=', $date)
+                ->whereDate('end_date', '>=', $date)
+                ->get(['employee_id', 'reason', 'description'])
+                ->each(function ($s) use (&$causes) {
+                    $causes[$s->employee_id] = ['cause' => 'mise_a_pied', 'description' => $s->description ?? $s->reason];
+                });
+        }
 
         Leave::whereIn('employee_id', $employeeIds)
             ->whereDate('start_date', '<=', $date)
@@ -90,7 +98,7 @@ class AttendanceAutomation
      * must always be undone through RevertsEmployeeDeparture, never silently
      * deleted here.
      */
-    public static function reconcilePeriod(int $employeeId, string $startDate, string $endDate): void
+    public static function reconcilePeriod(int $employeeId, string $startDate, string $endDate, bool $skipRestDays = false): void
     {
         Attendance::where('employee_id', $employeeId)
             ->whereDate('date', '>=', $startDate)
@@ -98,6 +106,11 @@ class AttendanceAutomation
             ->where(function ($query) {
                 $query->whereNull('absence_cause')->orWhere('absence_cause', '!=', 'stc');
             })
+            // A mise à pied doesn't cover its Sundays/holidays, so a row
+            // keyed on one of those days isn't superseded by it.
+            ->when($skipRestDays, fn ($q) => $q
+                ->whereRaw('DAYOFWEEK(date) <> 1')
+                ->whereNotIn('date',Suspension::holidayDatesFrom($startDate, $endDate)))
             ->delete();
     }
 
@@ -123,7 +136,7 @@ class AttendanceAutomation
 
         $rows = [];
 
-        $addPeriods = function (Collection $periods, string $cause) use (&$rows, $employeesById, $from, $to, $existingKeys) {
+        $addPeriods = function (Collection $periods, string $cause, ?array $restDayHolidays = null) use (&$rows, $employeesById, $from, $to, $existingKeys) {
             foreach ($periods as $period) {
                 $employee = $employeesById->get($period->employee_id);
                 if (! $employee) {
@@ -134,6 +147,10 @@ class AttendanceAutomation
                 $end = $to ? Carbon::parse($period->end_date)->min(Carbon::parse($to)) : Carbon::parse($period->end_date);
 
                 for ($cursor = $start->copy(); $cursor->lte($end); $cursor->addDay()) {
+                    // Mise à pied: its Sundays/holidays aren't part of it.
+                    if ($restDayHolidays !== null && Suspension::isRestDay($cursor, $restDayHolidays)) {
+                        continue;
+                    }
                     $key = $period->employee_id.'|'.$cursor->toDateString();
                     if (in_array($key, $existingKeys, true)) {
                         continue;
@@ -166,7 +183,12 @@ class AttendanceAutomation
             ->when($from, fn ($q) => $q->whereDate('end_date', '>=', $from))
             ->when($to, fn ($q) => $q->whereDate('start_date', '<=', $to));
 
-        $addPeriods($overlap(Suspension::query())->get(), 'mise_a_pied');
+        $suspensions = $overlap(Suspension::query())->get();
+        $suspensionHolidays = $suspensions->isEmpty() ? [] : array_flip(Suspension::holidayDatesFrom(
+            $suspensions->min('start_date'),
+            $suspensions->max('end_date')
+        ));
+        $addPeriods($suspensions, 'mise_a_pied', $suspensionHolidays);
         $addPeriods($overlap(Leave::query())->get(), 'conge');
         $addPeriods($overlap(Illness::query())->get(), 'maladie');
 

@@ -58,7 +58,7 @@ class SuspensionController extends Controller
         // before this Mise à pied was declared would otherwise keep
         // shadowing the auto-derived "Absent - Mise à pied" default forever
         // on Pointage.
-        AttendanceAutomation::reconcilePeriod($suspension->employee_id, $suspension->start_date->toDateString(), $suspension->end_date->toDateString());
+        AttendanceAutomation::reconcilePeriod($suspension->employee_id, $suspension->start_date->toDateString(), $suspension->end_date->toDateString(), skipRestDays: true);
 
         AuditLogger::log(
             'suspension.created',
@@ -74,9 +74,12 @@ class SuspensionController extends Controller
     {
         $this->ensureSiteAccess($request, $suspension->site_id);
         $data = $request->validate($this->rules());
+        // The sanctioned employee never changes on an edit (and could belong
+        // to another site): only the sanction's own fields are corrected.
+        $data['employee_id'] = $suspension->employee_id;
         $data['end_date'] = Suspension::endDateForDuration(Carbon::parse($data['start_date']), $data['duration_days']);
         $suspension->update($data);
-        AttendanceAutomation::reconcilePeriod($suspension->employee_id, $suspension->start_date->toDateString(), $suspension->end_date->toDateString());
+        AttendanceAutomation::reconcilePeriod($suspension->employee_id, $suspension->start_date->toDateString(), $suspension->end_date->toDateString(), skipRestDays: true);
 
         AuditLogger::log(
             'suspension.updated',

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Plus, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 import { api, apiErrorMessage } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
@@ -25,6 +25,9 @@ export default function SanctionsPage() {
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [deleting, setDeleting] = useState<{ type: 'warning' | 'suspension'; id: number } | null>(null);
+  const [editing, setEditing] = useState<
+    { type: 'warning'; record: DisciplinaryWarning } | { type: 'suspension'; record: Suspension } | null
+  >(null);
   const siteParams = useSiteParams();
   const queryClient = useQueryClient();
 
@@ -65,9 +68,22 @@ export default function SanctionsPage() {
     {
       header: 'Actions',
       accessor: (w) => (
-        <button className="rounded-md p-1.5 text-red-500 hover:bg-red-50" onClick={() => setDeleting({ type: 'warning', id: w.id })}>
-          <Trash2 size={16} />
-        </button>
+        <div className="flex gap-1">
+          <button
+            className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+            title="Modifier"
+            onClick={() => setEditing({ type: 'warning', record: w })}
+          >
+            <Pencil size={16} />
+          </button>
+          <button
+            className="rounded-md p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/15"
+            title="Supprimer"
+            onClick={() => setDeleting({ type: 'warning', id: w.id })}
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
       ),
     },
   ];
@@ -82,9 +98,22 @@ export default function SanctionsPage() {
     {
       header: 'Actions',
       accessor: (s) => (
-        <button className="rounded-md p-1.5 text-red-500 hover:bg-red-50" onClick={() => setDeleting({ type: 'suspension', id: s.id })}>
-          <Trash2 size={16} />
-        </button>
+        <div className="flex gap-1">
+          <button
+            className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+            title="Modifier"
+            onClick={() => setEditing({ type: 'suspension', record: s })}
+          >
+            <Pencil size={16} />
+          </button>
+          <button
+            className="rounded-md p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/15"
+            title="Supprimer"
+            onClick={() => setDeleting({ type: 'suspension', id: s.id })}
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
       ),
     },
   ];
@@ -159,6 +188,7 @@ export default function SanctionsPage() {
       )}
 
       {showForm && <SanctionFormModal type={tab === 'Avertissements' ? 'warning' : 'suspension'} onClose={() => setShowForm(false)} />}
+      {editing && <SanctionFormModal type={editing.type} record={editing.record} onClose={() => setEditing(null)} />}
 
       <ConfirmDialog
         open={!!deleting}
@@ -172,31 +202,42 @@ export default function SanctionsPage() {
   );
 }
 
-function SanctionFormModal({ type, onClose }: { type: 'warning' | 'suspension'; onClose: () => void }) {
+function SanctionFormModal({
+  type,
+  record,
+  onClose,
+}: {
+  type: 'warning' | 'suspension';
+  /** The sanction being edited; omitted when creating a new one. */
+  record?: DisciplinaryWarning | Suspension;
+  onClose: () => void;
+}) {
   const queryClient = useQueryClient();
-  const [employee, setEmployee] = useState<Employee | null>(null);
+  const isEdit = !!record;
+  const suspension = type === 'suspension' ? (record as Suspension | undefined) : undefined;
+  const today = new Date().toISOString().slice(0, 10);
+  const [employee, setEmployee] = useState<Employee | null>(record?.employee ?? null);
   const [form, setForm] = useState({
-    date: new Date().toISOString().slice(0, 10),
-    reason: '',
-    description: '',
-    duration_days: 1,
-    start_date: new Date().toISOString().slice(0, 10),
+    date: record?.date.slice(0, 10) ?? today,
+    reason: record?.reason ?? '',
+    description: record?.description ?? '',
+    duration_days: String(suspension?.duration_days ?? 1),
+    start_date: suspension?.start_date.slice(0, 10) ?? today,
   });
+  // On edit the employee stays the one already on file (the server keeps it too).
+  const employeeId = record?.employee_id ?? employee?.id;
 
   const mutation = useMutation({
     mutationFn: async (): Promise<unknown> => {
       if (type === 'warning') {
-        return api.post('/disciplinary-warnings', {
-          employee_id: employee?.id,
-          date: form.date,
-          reason: form.reason,
-          description: form.description,
-        });
+        const payload = { employee_id: employeeId, date: form.date, reason: form.reason, description: form.description };
+        return record ? api.put(`/disciplinary-warnings/${record.id}`, payload) : api.post('/disciplinary-warnings', payload);
       }
-      return api.post('/suspensions', { ...form, employee_id: employee?.id });
+      const payload = { ...form, duration_days: Number(form.duration_days), employee_id: employeeId };
+      return record ? api.put(`/suspensions/${record.id}`, payload) : api.post('/suspensions', payload);
     },
     onSuccess: () => {
-      toast.success('Sanction enregistrée.');
+      toast.success(isEdit ? 'Sanction modifiée.' : 'Sanction enregistrée.');
       queryClient.invalidateQueries({ queryKey: ['disciplinary-warnings'] });
       queryClient.invalidateQueries({ queryKey: ['suspensions'] });
       onClose();
@@ -205,7 +246,19 @@ function SanctionFormModal({ type, onClose }: { type: 'warning' | 'suspension'; 
   });
 
   return (
-    <Modal open onClose={onClose} title={type === 'warning' ? 'Nouvel avertissement' : 'Nouvelle mise à pied'}>
+    <Modal
+      open
+      onClose={onClose}
+      title={
+        type === 'warning'
+          ? isEdit
+            ? "Modifier l'avertissement"
+            : 'Nouvel avertissement'
+          : isEdit
+            ? 'Modifier la mise à pied'
+            : 'Nouvelle mise à pied'
+      }
+    >
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -213,7 +266,16 @@ function SanctionFormModal({ type, onClose }: { type: 'warning' | 'suspension'; 
         }}
         className="space-y-4"
       >
-        <EmployeeSelect value={employee?.id ?? null} onChange={setEmployee} />
+        {record ? (
+          <div>
+            <p className="mb-1 text-sm font-medium text-slate-700 dark:text-slate-300">Employé</p>
+            <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-200">
+              {record.employee?.full_name ?? '—'}
+            </p>
+          </div>
+        ) : (
+          <EmployeeSelect value={employee?.id ?? null} onChange={setEmployee} />
+        )}
         <TextField label="Date" type="date" required value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
         <TextField label="Motif" required value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
         <TextAreaField
@@ -232,19 +294,24 @@ function SanctionFormModal({ type, onClose }: { type: 'warning' | 'suspension'; 
             />
             <TextField
               label="Durée (jours)"
-              type="number"
-              min={1}
+              type="text"
+              inputMode="numeric"
+              pattern="[1-9][0-9]*"
+              title="Nombre de jours (1 ou plus)"
               required
               value={form.duration_days}
-              onChange={(e) => setForm({ ...form, duration_days: Number(e.target.value) })}
+              onChange={(e) => setForm({ ...form, duration_days: e.target.value.replace(/\D/g, '') })}
             />
+            <p className="text-xs text-slate-400 sm:col-span-2 dark:text-slate-500">
+              Les dimanches et les jours fériés ne sont pas comptés : la date de fin est repoussée d'autant.
+            </p>
           </div>
         )}
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>
             Annuler
           </Button>
-          <Button type="submit" disabled={!employee || mutation.isPending}>
+          <Button type="submit" disabled={!employeeId || mutation.isPending}>
             Enregistrer
           </Button>
         </div>

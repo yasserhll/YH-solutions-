@@ -58,6 +58,9 @@ class DisciplinaryWarningController extends Controller
     {
         $this->ensureSiteAccess($request, $disciplinaryWarning->site_id);
         $data = $request->validate($this->rules());
+        // The warned employee never changes on an edit (and could belong to
+        // another site): only the warning's own fields are corrected.
+        $data['employee_id'] = $disciplinaryWarning->employee_id;
         $disciplinaryWarning->update($data);
 
         AuditLogger::log(

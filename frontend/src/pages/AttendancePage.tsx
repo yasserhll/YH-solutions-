@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { UserX, Pencil, Download, CalendarOff, Trash2, X, FileSpreadsheet } from 'lucide-react';
 import { api, apiErrorMessage, downloadFile } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
-import type { AbsenceCause, DailyAttendanceRow, DailyAttendanceSheet, Employee, Illness, Paginated } from '../types';
+import type { AbsenceCause, DailyAttendanceRow, DailyAttendanceSheet, Employee, Illness, Paginated, Suspension } from '../types';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Button';
 import { SearchInput } from '../components/ui/SearchInput';
@@ -459,6 +459,12 @@ function AbsenceModal({
   // to just this one day but editable to cover more.
   const [illnessStart, setIllnessStart] = useState(date);
   const [illnessEnd, setIllnessEnd] = useState(date);
+  // Only used when cause === 'mise_a_pied': declares a real Suspension
+  // starting on this day (same as Sanctions → Nouvelle mise à pied), whose
+  // end date the server computes from the duration, skipping Sundays and
+  // holidays. Pointage then shows "Absent - Mise à pied" for the whole period.
+  const [suspensionDays, setSuspensionDays] = useState('1');
+  const [suspensionReason, setSuspensionReason] = useState('');
 
   const mutation = useMutation({
     mutationFn: async (): Promise<unknown> => {
@@ -471,6 +477,21 @@ function AbsenceModal({
               employee_id: t.employee_id,
               start_date: illnessStart,
               end_date: illnessEnd,
+              description,
+            }),
+          ),
+        );
+      }
+
+      if (cause === 'mise_a_pied') {
+        return Promise.all(
+          targets.map((t) =>
+            api.post<Suspension>('/suspensions', {
+              employee_id: t.employee_id,
+              date,
+              start_date: date,
+              duration_days: Number(suspensionDays),
+              reason: suspensionReason,
               description,
             }),
           ),
@@ -494,10 +515,20 @@ function AbsenceModal({
         description,
       });
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['attendance-daily'] });
       if (cause === 'maladie') {
         queryClient.invalidateQueries({ queryKey: ['illnesses'] });
+      }
+      if (cause === 'mise_a_pied') {
+        queryClient.invalidateQueries({ queryKey: ['suspensions'] });
+        const first = (result as { data: Suspension }[])[0]?.data;
+        if (first) {
+          const fmt = (d: string) => new Date(d).toLocaleDateString('fr-FR');
+          toast.success(`Mise à pied enregistrée du ${fmt(first.start_date)} au ${fmt(first.end_date)}.`);
+          onSaved();
+          return;
+        }
       }
       if (cause === 'stc') {
         queryClient.invalidateQueries({ queryKey: ['employees'] });
@@ -552,12 +583,36 @@ function AbsenceModal({
           // (Congés/Sanctions) — le pointage y sera automatiquement synchronisé
           // (voir la période active correspondante) ; ce choix ici ne couvre
           // que ce seul jour.
-          (cause === 'conge' || cause === 'mise_a_pied') && (
+          cause === 'conge' && (
             <p className="text-xs text-slate-400 dark:text-slate-500">
-              Normalement suivi depuis le module {cause === 'conge' ? 'Congés' : 'Sanctions'} (synchronisé automatiquement avec le
-              pointage) — ce choix ici ne couvre que cette seule journée.
+              Normalement suivi depuis le module Congés (synchronisé automatiquement avec le pointage) — ce choix ici ne couvre que
+              cette seule journée.
             </p>
           )
+        )}
+        {cause === 'mise_a_pied' && (
+          <div className="space-y-3">
+            <TextField
+              label="Durée (jours)"
+              type="text"
+              inputMode="numeric"
+              pattern="[1-9][0-9]*"
+              title="Nombre de jours (1 ou plus)"
+              required
+              value={suspensionDays}
+              onChange={(e) => setSuspensionDays(e.target.value.replace(/\D/g, ''))}
+            />
+            <TextField
+              label="Motif"
+              required
+              value={suspensionReason}
+              onChange={(e) => setSuspensionReason(e.target.value)}
+            />
+            <p className="text-xs text-slate-400 dark:text-slate-500">
+              La mise à pied commence le {new Date(date).toLocaleDateString('fr-FR')} et dure {suspensionDays || '…'} jour(s), sans
+              compter les dimanches ni les jours fériés. Elle est enregistrée dans Sanctions (modifiable / supprimable là-bas).
+            </p>
+          </div>
         )}
         {cause === 'stc' && (
           <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">

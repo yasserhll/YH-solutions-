@@ -94,9 +94,16 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/reports/leaves/export', [ReportController::class, 'exportLeaves']);
     });
 
+    // A mise à pied can also be declared from Pointage ("Marquer absent" →
+    // Mise à pied + durée), so creating one needs either session; editing
+    // or deleting it stays in Sanctions.
+    Route::post('/suspensions', [SuspensionController::class, 'store'])
+        ->middleware('module:pointage,sanctions')
+        ->name('suspensions.store');
+
     Route::middleware('module:sanctions')->group(function () {
         Route::apiResource('disciplinary-warnings', DisciplinaryWarningController::class)->except(['show']);
-        Route::apiResource('suspensions', SuspensionController::class)->except(['show']);
+        Route::apiResource('suspensions', SuspensionController::class)->except(['show', 'store']);
 
         Route::get('/reports/sanctions', [ReportController::class, 'sanctions']);
         Route::get('/reports/sanctions/export', [ReportController::class, 'exportSanctions']);
