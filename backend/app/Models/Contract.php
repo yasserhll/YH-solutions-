@@ -118,14 +118,33 @@ class Contract extends Model
     /** Adds `cdd_rank` (see getCddNumberAttribute) in the same query as the list. */
     public function scopeWithCddNumber(Builder $query): Builder
     {
+        [$sql, $bindings] = self::cddRankSql();
+
+        return $query->select('contracts.*')->selectRaw("{$sql} as cdd_rank", $bindings);
+    }
+
+    /**
+     * Only CDDs with that number (1er / 2ème / 3ème…); with $orMore, that
+     * number or higher ("3ème CDD et plus"). Same expression as cdd_rank.
+     */
+    public function scopeWithCddRank(Builder $query, int $rank, bool $orMore = false): Builder
+    {
+        [$sql, $bindings] = self::cddRankSql();
+
+        return $query->where('contracts.type', 'cdd')
+            ->whereRaw("{$sql} ".($orMore ? '>=' : '=').' ?', [...$bindings, $rank]);
+    }
+
+    /** SQL for a CDD's number: the hand-picked one, else its rank in the history. */
+    protected static function cddRankSql(): array
+    {
         $history = self::query()->from('contracts as c2')->selectRaw('count(*)')
             ->whereColumn('c2.employee_id', 'contracts.employee_id')
             ->where('c2.type', 'cdd')
             ->where(fn ($q) => $q->whereColumn('c2.start_date', '<', 'contracts.start_date')
                 ->orWhere(fn ($q) => $q->whereColumn('c2.start_date', 'contracts.start_date')->whereColumn('c2.id', '<=', 'contracts.id')));
 
-        return $query->select('contracts.*')
-            ->selectRaw('COALESCE(contracts.rank_override, ('.$history->toSql().')) as cdd_rank', $history->getBindings());
+        return ['COALESCE(contracts.rank_override, ('.$history->toSql().'))', $history->getBindings()];
     }
 
     /**

@@ -130,6 +130,7 @@ export default function ContractsPage() {
   // ?state= lets the top-bar notification open the "À traiter" filter directly.
   const [searchParams] = useSearchParams();
   const [state, setState] = useState(searchParams.get('state') ?? '');
+  const [rank, setRank] = useState(searchParams.get('rank') ?? '');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [form, setForm] = useState<{ contract?: Contract } | null>(null);
@@ -139,10 +140,10 @@ export default function ContractsPage() {
   const queryClient = useQueryClient();
 
   const listQuery = useQuery({
-    queryKey: ['contracts', siteParams, state, search, page],
+    queryKey: ['contracts', siteParams, state, rank, search, page],
     queryFn: () =>
       api
-        .get<Paginated<Contract>>('/contracts', { params: { ...siteParams, state: state || undefined, search: search || undefined, page } })
+        .get<Paginated<Contract>>('/contracts', { params: { ...siteParams, state: state || undefined, rank: rank || undefined, search: search || undefined, page } })
         .then((r) => r.data),
   });
 
@@ -313,6 +314,14 @@ export default function ContractsPage() {
                 {f.label}
               </option>
             ))}
+          </SelectField>
+        </div>
+        <div className="w-full sm:w-56">
+          <SelectField label="Contrat" value={rank} onChange={(e) => (setRank(e.target.value), setPage(1))}>
+            <option value="">Tous les contrats</option>
+            <option value="1">1er CDD</option>
+            <option value="2">2ème CDD</option>
+            <option value="3">3ème CDD et plus</option>
           </SelectField>
         </div>
       </div>

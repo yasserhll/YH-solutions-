@@ -41,6 +41,11 @@ class ContractController extends Controller
             ->inState((string) $request->query('state', ''))
             ->withCddNumber();
 
+        // ?rank=1|2|3 — 1er CDD, 2ème CDD, 3ème CDD et plus.
+        if ($rank = $request->integer('rank')) {
+            $query->withCddRank(min($rank, 3), $rank >= 3);
+        }
+
         if ($search = $request->query('search')) {
             $query->whereHas('employee', fn ($q) => $q->where('full_name', 'like', "%{$search}%"));
         }
