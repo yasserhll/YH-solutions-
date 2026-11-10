@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreAttendanceRequest;
 use App\Models\Assignment;
 use App\Models\Attendance;
+use App\Models\Contract;
 use App\Models\Employee;
 use App\Models\EmployeeExit;
 use App\Models\Holiday;
@@ -249,6 +250,9 @@ class AttendanceController extends Controller
         Assignment::where('employee_id', $employee->id)
             ->where('is_current', true)
             ->update(['is_current' => false, 'end_date' => $date]);
+
+        // Contrats: the current contract ends with this STC.
+        Contract::closeForDeparture($employee->id, $date);
     }
 
     public function bulkStore(Request $request)
@@ -354,7 +358,7 @@ class AttendanceController extends Controller
                 // delete someone's hand-entered record.
                 $exit = EmployeeExit::where('employee_id', $attendance->employee_id)
                     ->whereDate('exit_date', $attendance->date)
-                    ->where('reason', 'STC')
+                    ->where('reason', 'like', 'STC%')
                     ->latest('id')
                     ->first();
 

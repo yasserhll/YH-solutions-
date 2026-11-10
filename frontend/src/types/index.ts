@@ -37,6 +37,7 @@ export type ModuleKey =
   | 'sanctions'
   | 'hse'
   | 'mouvements'
+  | 'contrats'
   | 'affectations'
   | 'heures_sup'
   | 'caisse'
@@ -689,4 +690,41 @@ export interface FuelGlobalSummary {
 export interface FuelGlobalPage extends Paginated<FuelGlobalRow> {
   site: { id: number; name: string; truck_unit: FuelUnit } | null;
   summary: FuelGlobalSummary;
+}
+
+/** en_cours / bientot (≤ alert_days) / termine / cdi / sorti for a current contract; renouvele / passe_cdi / stc once closed. */
+export type ContractState = 'en_cours' | 'bientot' | 'termine' | 'cdi' | 'sorti' | 'renouvele' | 'passe_cdi' | 'stc';
+
+export interface Contract {
+  id: number;
+  employee_id: number;
+  site_id: number | null;
+  type: 'cdd' | 'cdi';
+  start_date: string;
+  end_date: string | null;
+  duration_months: number | null;
+  /** CDD number picked by hand (null = from the history). */
+  rank_override: number | null;
+  outcome: 'renouvele' | 'cdi' | 'stc' | null;
+  outcome_date: string | null;
+  /** A 2nd+ CDD turns into a CDI by itself at its end while this is true. */
+  auto_cdi: boolean;
+  notes: string | null;
+  state: ContractState;
+  /** Days until the end (negative once ended); null for a CDI or a closed contract. */
+  days_left: number | null;
+  /** 1 = 1er CDD, 2 = 2ème CDD… (null for a CDI). */
+  cdd_number: number | null;
+  employee?: Pick<Employee, 'id' | 'full_name' | 'status' | 'site_id' | 'entry_date'> & {
+    site?: { id: number; name: string } | null;
+    position?: { id: number; name: string } | null;
+  };
+}
+
+export interface ContractSummary {
+  en_cours: number;
+  bientot: number;
+  termine: number;
+  cdi: number;
+  alert_days: number;
 }

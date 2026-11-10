@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Concerns\InteractsWithSites;
 use App\Http\Controllers\Controller;
 use App\Models\Assignment;
+use App\Models\Contract;
 use App\Models\Employee;
 use App\Models\Entry;
 use App\Services\AuditLogger;
@@ -76,6 +77,9 @@ class EntryController extends Controller
                 'created_by' => $request->user()->id,
             ]);
 
+            // Every new entry signs a 3-month CDD (Contrats session).
+            Contract::openFirstCdd($employee, $data['entry_date'], $request->user()->id);
+
             AuditLogger::log('entry.created', "Entrée — {$data['full_name']}", $siteId, $entry);
 
             return response()->json($entry->load(['employee', 'site', 'department', 'position']), 201);
@@ -99,7 +103,21 @@ class EntryController extends Controller
             'entry_date' => ['required', 'date'],
         ]);
 
+        $previousEntryDate = $entry->entry_date?->toDateString();
         $entry->update($data);
+
+        // A corrected entry date moves the first contract with it, as long
+        // as nothing was decided on it yet.
+        if ($entry->employee_id && $previousEntryDate && $previousEntryDate !== $entry->entry_date->toDateString()) {
+            $first = Contract::where('employee_id', $entry->employee_id)
+                ->whereNull('outcome')->where('type', 'cdd')
+                ->whereDate('start_date', $previousEntryDate)
+                ->first();
+            $first?->update([
+                'start_date' => $entry->entry_date->toDateString(),
+                'end_date' => Contract::endFor($entry->entry_date, $first->duration_months ?? Contract::DEFAULT_MONTHS)->toDateString(),
+            ]);
+        }
 
         if ($entry->employee_id) {
             $entry->employee->update([

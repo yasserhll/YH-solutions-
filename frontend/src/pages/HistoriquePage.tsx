@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
 import {
+  FileSignature,
   History,
   Clock,
   HeartPulse,
@@ -41,6 +42,7 @@ const moduleMeta: Record<string, { label: string; icon: LucideIcon; tone: string
   assignment: { label: 'Affectations', icon: Briefcase, tone: 'text-purple-500 bg-purple-50 dark:bg-purple-500/10' },
   entry: { label: 'Entrées', icon: LogIn, tone: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10' },
   exit: { label: 'Sorties', icon: LogOut, tone: 'text-slate-500 bg-slate-100 dark:bg-slate-800' },
+  contract: { label: 'Contrats', icon: FileSignature, tone: 'text-sky-500 bg-sky-50 dark:bg-sky-500/10' },
   cash_transaction: { label: 'Caisse', icon: Wallet, tone: 'text-teal-500 bg-teal-50 dark:bg-teal-500/10' },
   employee: { label: 'Personnel', icon: Users, tone: 'text-indigo-500 bg-indigo-50 dark:bg-indigo-500/10' },
   fuel: { label: 'Consommation', icon: Fuel, tone: 'text-orange-500 bg-orange-50 dark:bg-orange-500/10' },

@@ -6,6 +6,8 @@ use App\Http\Controllers\Concerns\InteractsWithSites;
 use App\Http\Controllers\Concerns\RevertsEmployeeDeparture;
 use App\Http\Controllers\Controller;
 use App\Models\Assignment;
+use App\Models\Attendance;
+use App\Models\Contract;
 use App\Models\Employee;
 use App\Models\EmployeeExit;
 use App\Services\AuditLogger;
@@ -65,6 +67,8 @@ class ExitController extends Controller
 
                 $employee->update(['status' => 'sorti', 'exit_date' => $data['exit_date']]);
                 $this->closeCurrentAssignment($employee, $data['exit_date']);
+                // Contrats: the current contract ends with this sortie.
+                Contract::closeForDeparture($employee->id, $data['exit_date']);
             } else {
                 $siteId = $this->resolveSiteId($request);
 
@@ -102,10 +106,24 @@ class ExitController extends Controller
             'reason' => ['nullable', 'string'],
         ]);
 
+        $previousExitDate = $exit->exit_date->toDateString();
         $exit->update($data);
 
         if ($exit->employee_id) {
             $exit->employee->update(['exit_date' => $data['exit_date']]);
+
+            // Keep the linked contract closure and STC pointage on the new date.
+            $newDate = $exit->exit_date->toDateString();
+            if ($newDate !== $previousExitDate) {
+                Contract::where('employee_id', $exit->employee_id)
+                    ->where('outcome', 'stc')->whereDate('outcome_date', $previousExitDate)
+                    ->update(['outcome_date' => $newDate]);
+                $stcRow = Attendance::where('employee_id', $exit->employee_id)
+                    ->whereDate('date', $previousExitDate)->where('absence_cause', 'stc')->first();
+                if ($stcRow && ! Attendance::where('employee_id', $exit->employee_id)->whereDate('date', $newDate)->exists()) {
+                    $stcRow->update(['date' => $newDate]);
+                }
+            }
         }
 
         AuditLogger::log('exit.updated', "Sortie modifiée — {$exit->full_name}", $exit->site_id, $exit);

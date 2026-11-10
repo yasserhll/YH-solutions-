@@ -35,7 +35,7 @@ class User extends Authenticatable
      * EnsureModuleAccess) and its own pages/sidebar entry on the frontend.
      */
     public const MODULES = [
-        'dashboard', 'pointage', 'conges', 'sanctions', 'hse', 'mouvements', 'affectations',
+        'dashboard', 'contrats', 'pointage', 'conges', 'sanctions', 'hse', 'mouvements', 'affectations',
         'heures_sup', 'caisse', 'consommation', 'personnel', 'rapports', 'historique',
     ];
 
@@ -44,7 +44,7 @@ class User extends Authenticatable
      * — exactly the access every role had before per-account sessions existed.
      */
     public const ROLE_MODULES = [
-        'responsable' => ['dashboard', 'pointage', 'conges', 'sanctions', 'mouvements', 'affectations', 'heures_sup', 'caisse', 'consommation', 'personnel', 'rapports', 'historique'],
+        'responsable' => ['dashboard', 'pointage', 'conges', 'sanctions', 'mouvements', 'contrats', 'affectations', 'heures_sup', 'caisse', 'consommation', 'personnel', 'rapports', 'historique'],
         'responsable_hse' => ['pointage', 'conges', 'sanctions', 'hse', 'mouvements', 'affectations'],
         'hse' => ['hse'],
     ];

@@ -16,6 +16,7 @@ import AttendancePage from './pages/AttendancePage';
 import LeavesPage from './pages/LeavesPage';
 import SanctionsPage from './pages/SanctionsPage';
 import MovementsPage from './pages/MovementsPage';
+import ContractsPage from './pages/ContractsPage';
 import AssignmentsPage from './pages/AssignmentsPage';
 import OvertimePage from './pages/OvertimePage';
 import CashPage from './pages/CashPage';
@@ -134,6 +135,14 @@ export default function App() {
                     element={
                       <RequireModule module="mouvements">
                         <MovementsPage />
+                      </RequireModule>
+                    }
+                  />
+                  <Route
+                    path="/contrats"
+                    element={
+                      <RequireModule module="contrats">
+                        <ContractsPage />
                       </RequireModule>
                     }
                   />

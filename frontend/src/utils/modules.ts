@@ -8,6 +8,7 @@ import type { AuthUser, ModuleKey } from '../types';
  */
 export const MODULES: { key: ModuleKey; label: string; path: string }[] = [
   { key: 'dashboard', label: 'Dashboard', path: '/' },
+  { key: 'contrats', label: 'Contrats', path: '/contrats' },
   { key: 'pointage', label: 'Pointage', path: '/pointage' },
   { key: 'conges', label: 'Congés', path: '/conges' },
   { key: 'sanctions', label: 'Sanctions', path: '/sanctions' },

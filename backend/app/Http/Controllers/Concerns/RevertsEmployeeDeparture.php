@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Concerns;
 
 use App\Models\Assignment;
+use App\Models\Attendance;
+use App\Models\Contract;
 use App\Models\Employee;
 use App\Models\EmployeeExit;
 
@@ -26,6 +28,21 @@ trait RevertsEmployeeDeparture
         if ($exit->employee_id && $exit->employee?->status === 'sorti') {
             $this->reopenCurrentAssignment($exit->employee, $exit->exit_date);
             $exit->employee->update(['status' => 'actif', 'exit_date' => null]);
+
+            // A contract closed by this sortie (Contrats → Sortie STC) is the
+            // current one again.
+            Contract::where('employee_id', $exit->employee_id)
+                ->where('outcome', 'stc')
+                ->whereDate('outcome_date', $exit->exit_date)
+                ->update(['outcome' => null, 'outcome_date' => null]);
+
+            // ...and the "Absent - STC" pointage of that day goes too, so
+            // cancelling from Entrées/Sorties or Contrats leaves Pointage
+            // exactly as cancelling from Pointage does.
+            Attendance::where('employee_id', $exit->employee_id)
+                ->whereDate('date', $exit->exit_date)
+                ->where('status', 'absent')->where('absence_cause', 'stc')
+                ->delete();
         }
 
         $exit->delete();

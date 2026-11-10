@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AssignmentController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\AuditLogController;
+use App\Http\Controllers\Api\ContractController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CashAccountController;
 use App\Http\Controllers\Api\CashTransactionController;
@@ -55,7 +56,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // EmployeeSelect (Congés/Sanctions/Mouvements/Affectations/Heures sup.
     // forms) searches employees — any session that picks an employee.
     Route::get('/employees', [EmployeeController::class, 'index'])
-        ->middleware('module:pointage,conges,sanctions,mouvements,affectations,heures_sup,personnel');
+        ->middleware('module:pointage,conges,sanctions,mouvements,contrats,affectations,heures_sup,personnel');
 
     Route::get('/dashboard', [DashboardController::class, 'index'])->middleware('module:dashboard');
 
@@ -92,6 +93,15 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/reports/leaves', [ReportController::class, 'leaves']);
         Route::get('/reports/leaves/export', [ReportController::class, 'exportLeaves']);
+    });
+
+    // Contrats: 3-month CDD signed at each entry, then renewed / CDI / sortie (STC).
+    Route::middleware('module:contrats')->group(function () {
+        Route::get('/contracts/summary', [ContractController::class, 'summary']);
+        Route::post('/contracts/{contract}/renew', [ContractController::class, 'renew']);
+        Route::post('/contracts/{contract}/cdi', [ContractController::class, 'makeCdi']);
+        Route::post('/contracts/{contract}/stc', [ContractController::class, 'stc']);
+        Route::apiResource('contracts', ContractController::class)->except(['show']);
     });
 
     // A mise à pied can also be declared from Pointage ("Marquer absent" →

@@ -25,9 +25,11 @@ import {
   LifeBuoy,
   MapPin,
   ChevronDown,
+  FileSignature,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../contexts/AuthContext';
+import { ContractNotifications } from '../components/ContractNotifications';
 import { useSiteFilter } from '../contexts/SiteFilterContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useQuery } from '@tanstack/react-query';
@@ -63,6 +65,7 @@ function navItemsFor(user: AuthUser | null): NavItem[] {
   const items: NavItem[] = [
     { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true, module: 'dashboard' },
     { to: '/hse', label: 'Tableau de bord HSE', icon: LayoutDashboard, end: true, module: 'hse', show: hseRole },
+    { to: '/contrats', label: 'Contrats', icon: FileSignature, module: 'contrats' },
     { to: '/pointage', label: 'Pointage', icon: Clock, module: 'pointage' },
     { to: '/conges', label: 'Congés', icon: CalendarDays, module: 'conges' },
     { to: '/sanctions', label: 'Sanctions', icon: ShieldAlert, module: 'sanctions' },
@@ -265,7 +268,9 @@ export function DashboardLayout() {
           >
             <PanelLeft size={20} />
           </button>
-          <div className="ml-auto min-w-0">
+          <div className="ml-auto flex min-w-0 items-center gap-2">
+            {/* Contracts ending / ended: opens by itself on the Dashboard. */}
+            <ContractNotifications autoOpen={location.pathname === '/'} />
             {isSuperAdmin || filterableSites.length > 1 ? (
               <SiteSwitcher sites={filterableSites} />
             ) : (
