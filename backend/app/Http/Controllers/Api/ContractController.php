@@ -138,6 +138,7 @@ class ContractController extends Controller
      */
     public function destroy(Request $request, Contract $contract)
     {
+        abort_unless($request->user()->isSuperAdmin(), 403, 'Seul le SuperAdmin peut supprimer un contrat.');
         $this->ensureSiteAccess($request, $contract->employee->site_id);
 
         if ($contract->outcome === 'stc') {

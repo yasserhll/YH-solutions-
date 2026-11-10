@@ -6,6 +6,7 @@ import { AlertTriangle, BadgeCheck, CalendarClock, FileSignature, LogOut, Pencil
 import clsx from 'clsx';
 import { api, apiErrorMessage } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
+import { useAuth } from '../contexts/AuthContext';
 import type { Contract, ContractState, ContractSummary, Employee, Paginated } from '../types';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Button';
@@ -136,6 +137,8 @@ export default function ContractsPage() {
   const [form, setForm] = useState<{ contract?: Contract } | null>(null);
   const [action, setAction] = useState<Action | null>(null);
   const [deleting, setDeleting] = useState<Contract | null>(null);
+  // Deleting a contract is reserved to the SuperAdmin (also enforced server-side).
+  const isSuperAdmin = useAuth().user?.role === 'superadmin';
   const siteParams = useSiteParams();
   const queryClient = useQueryClient();
 
@@ -248,7 +251,7 @@ export default function ContractsPage() {
                 <Pencil size={16} />
               </button>
             )}
-            {c.outcome !== 'stc' && (
+            {isSuperAdmin && c.outcome !== 'stc' && (
               <button className="rounded-md p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/15" title="Supprimer" onClick={() => setDeleting(c)}>
                 <Trash2 size={16} />
               </button>
