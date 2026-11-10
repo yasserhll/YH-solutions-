@@ -147,7 +147,7 @@ export function DashboardLayout() {
       {/* Fixed, not part of the document flow — never scrolls with the page. */}
       <aside
         className={clsx(
-          'fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 flex-col border-r border-slate-200 dark:border-slate-800 bg-white transition-transform duration-200 dark:bg-slate-900',
+          'fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 flex-col pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] border-r border-slate-200 dark:border-slate-800 bg-white transition-transform duration-200 dark:bg-slate-900',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
           desktopOpen ? 'lg:translate-x-0' : 'lg:-translate-x-full',
         )}
@@ -260,7 +260,7 @@ export function DashboardLayout() {
       </aside>
 
       <div className={clsx('flex min-h-screen flex-col transition-[margin] duration-200', desktopOpen ? 'lg:ml-64' : 'lg:ml-0')}>
-        <header className="flex h-16 shrink-0 items-center gap-3 border-b border-slate-200 dark:border-slate-800 bg-white px-4 dark:bg-slate-900 lg:px-6">
+        <header className="flex h-[calc(4rem+env(safe-area-inset-top))] shrink-0 items-center gap-3 pt-[env(safe-area-inset-top)] border-b border-slate-200 dark:border-slate-800 bg-white px-4 dark:bg-slate-900 lg:px-6">
           <button
             className="rounded-md p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
             onClick={toggleSidebar}

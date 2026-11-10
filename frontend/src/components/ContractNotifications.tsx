@@ -93,7 +93,7 @@ function DeviceToggle() {
   const blocked = push.status === 'denied' || push.status === 'ios-install' || push.status === 'unsupported';
 
   return (
-    <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-800/40">
+    <div className="shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-800/40">
       <div className="flex items-center gap-3">
         <Smartphone size={16} className="shrink-0 text-slate-400 dark:text-slate-500" />
         <span className="flex-1 text-sm font-medium text-slate-700 dark:text-slate-200">Notifications sur cet appareil</span>
@@ -213,9 +213,18 @@ export function ContractNotifications({ autoOpen }: { autoOpen: boolean }) {
       </button>
 
       {open && (
-        <div className="animate-notif-in absolute right-0 top-12 z-50 w-[min(94vw,384px)] origin-top-right overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl shadow-slate-900/10 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/50">
+        <>
+        {/* Phone: dims the page; a tap outside closes the panel. */}
+        <div className="fixed inset-0 z-40 bg-slate-900/40 sm:hidden" onClick={close} aria-hidden />
+        {/*
+          Phone (< sm): a sheet pinned under the top bar with 12px margins on
+          both sides, whatever sits next to the bell, below the iPhone notch
+          (safe-area), never taller than the screen — the list scrolls, the
+          device switch stays visible. Tablet / desktop: dropdown under the bell.
+        */}
+        <div className="animate-notif-in fixed inset-x-3 top-[calc(4.5rem+env(safe-area-inset-top))] z-50 flex max-h-[calc(100dvh-5.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] origin-top flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl shadow-slate-900/10 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/50 sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:max-h-[calc(100dvh-5rem)] sm:w-96 sm:origin-top-right">
           {/* Header */}
-          <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+          <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
             <div className="min-w-0">
               <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Notifications</h2>
               <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Contrats à traiter</p>
@@ -243,7 +252,7 @@ export function ContractNotifications({ autoOpen }: { autoOpen: boolean }) {
 
           {/* List */}
           {count === 0 ? (
-            <div className="flex flex-col items-center gap-2 px-6 py-8 text-center">
+            <div className="flex shrink-0 flex-col items-center gap-2 px-6 py-8 text-center">
               <CheckCircle2 size={26} className="text-emerald-500" />
               <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Tout est à jour</p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -251,7 +260,7 @@ export function ContractNotifications({ autoOpen }: { autoOpen: boolean }) {
               </p>
             </div>
           ) : (
-            <ul className="max-h-[min(55vh,420px)] divide-y divide-slate-100 overflow-y-auto dark:divide-slate-800">
+            <ul className="min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto overscroll-contain dark:divide-slate-800 sm:max-h-[420px]">
               {rows.map((c) => {
                 const late = (c.days_left ?? 0) < 0;
                 return (
@@ -297,13 +306,14 @@ export function ContractNotifications({ autoOpen }: { autoOpen: boolean }) {
           <Link
             to="/contrats?state=a_traiter"
             onClick={close}
-            className="flex items-center justify-center gap-1.5 border-t border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800/50"
+            className="flex shrink-0 items-center justify-center gap-1.5 border-t border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800/50"
           >
             {total > rows.length ? `Voir les ${total} contrats` : 'Ouvrir les contrats'}
             <ArrowRight size={15} />
           </Link>
           <DeviceToggle />
         </div>
+        </>
       )}
     </div>
   );

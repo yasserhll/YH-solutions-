@@ -262,7 +262,6 @@ export default function ContractsPage() {
     },
   ];
 
-  const toHandle = (summary?.bientot ?? 0) + (summary?.termine ?? 0);
 
   return (
     <div>
@@ -275,21 +274,6 @@ export default function ContractsPage() {
           </Button>
         }
       />
-
-      {toHandle > 0 && (
-        <button
-          onClick={() => pick('a_traiter')}
-          className="mb-4 flex w-full items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-left text-sm text-amber-800 hover:bg-amber-100 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/15"
-        >
-          <AlertTriangle size={18} className="shrink-0" />
-          <span>
-            {summary?.termine ? <strong className="text-red-600 dark:text-red-400">{summary.termine} contrat(s) terminé(s)</strong> : null}
-            {summary?.termine && summary?.bientot ? ' et ' : null}
-            {summary?.bientot ? <strong>{summary.bientot} contrat(s) se terminent dans moins de {alertDays} jours</strong> : null}
-            {' — à renouveler, passer en CDI ou sortie (STC).'}
-          </span>
-        </button>
-      )}
 
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <button className="text-left" onClick={() => pick('en_cours')}>
