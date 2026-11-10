@@ -199,11 +199,13 @@ class EmployeeController extends Controller
     {
         $this->ensureSiteAccess($request, $employee->site_id);
         $fullName = $employee->full_name;
+        // Soft delete: the person also disappears from Affectations and
+        // Entrées (their index lists only existing employees).
         $employee->delete();
 
         AuditLogger::log('employee.deleted', "Employé supprimé — {$fullName}", $employee->site_id, $employee);
 
-        return response()->json(['message' => 'Employé supprimé.']);
+        return response()->json(['message' => 'Employé supprimé de Personnel, des Affectations et des Entrées.']);
     }
 
     /**

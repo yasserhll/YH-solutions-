@@ -5,6 +5,8 @@ import { Plus, Pencil, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 import { api, apiErrorMessage } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
+import { useAuth } from '../contexts/AuthContext';
+import { hasModule } from '../utils/modules';
 import { useUrlTab } from '../hooks/useUrlTab';
 import { useDepartments, usePositions, useSelectableSites } from '../hooks/useReferenceData';
 import type { Employee, Entry, Exit, Paginated } from '../types';
@@ -28,6 +30,9 @@ export default function MovementsPage() {
   const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
   const [editingExit, setEditingExit] = useState<Exit | null>(null);
   const [deletingEntry, setDeletingEntry] = useState<Entry | null>(null);
+  // Deleting the entry of a person deletes the person (Personnel +
+  // Affectations): needs the Personnel session (also enforced server-side).
+  const canDeletePerson = hasModule(useAuth().user, 'personnel');
   const [deletingExit, setDeletingExit] = useState<Exit | null>(null);
   const siteParams = useSiteParams();
   const queryClient = useQueryClient();
@@ -45,10 +50,12 @@ export default function MovementsPage() {
   });
 
   const deleteEntryMutation = useMutation({
-    mutationFn: (id: number) => api.delete(`/entries/${id}`),
-    onSuccess: () => {
-      toast.success('Entrée supprimée.');
+    mutationFn: (id: number) => api.delete<{ message: string }>(`/entries/${id}`),
+    onSuccess: (res) => {
+      toast.success(res.data?.message ?? 'Entrée supprimée.');
       queryClient.invalidateQueries({ queryKey: ['entries'] });
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments'] });
       setDeletingEntry(null);
     },
     onError: (err) => toast.error(apiErrorMessage(err)),
@@ -78,9 +85,11 @@ export default function MovementsPage() {
           <button className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => setEditingEntry(e)}>
             <Pencil size={16} />
           </button>
-          <button className="rounded-md p-1.5 text-red-500 hover:bg-red-50" onClick={() => setDeletingEntry(e)}>
-            <Trash2 size={16} />
-          </button>
+          {(canDeletePerson || !e.employee_id) && (
+            <button className="rounded-md p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/15" title="Supprimer" onClick={() => setDeletingEntry(e)}>
+              <Trash2 size={16} />
+            </button>
+          )}
         </div>
       ),
     },
@@ -176,8 +185,12 @@ export default function MovementsPage() {
 
       <ConfirmDialog
         open={!!deletingEntry}
-        title="Supprimer l'entrée"
-        message="Voulez-vous vraiment supprimer cet enregistrement d'entrée ?"
+        title={deletingEntry?.employee_id ? 'Supprimer la personne' : "Supprimer l'entrée"}
+        message={
+          deletingEntry?.employee_id
+            ? `${deletingEntry.full_name} sera supprimé(e) des Entrées, de Personnel ET des Affectations. Continuer ?`
+            : "Voulez-vous vraiment supprimer cet enregistrement d'entrée ?"
+        }
         onCancel={() => setDeletingEntry(null)}
         onConfirm={() => deletingEntry && deleteEntryMutation.mutate(deletingEntry.id)}
         isLoading={deleteEntryMutation.isPending}

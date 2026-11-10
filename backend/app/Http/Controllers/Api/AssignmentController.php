@@ -16,7 +16,9 @@ class AssignmentController extends Controller
 
     public function index(Request $request)
     {
-        $query = Assignment::with(['employee', 'site', 'department', 'position']);
+        // A person deleted in Personnel disappears from Affectations too
+        // (soft delete: their history rows are kept, just no longer listed).
+        $query = Assignment::with(['employee', 'site', 'department', 'position'])->whereHas('employee');
         $this->scopeToSite($query, $request);
 
         if ($employeeId = $request->query('employee_id')) {
@@ -111,14 +113,29 @@ class AssignmentController extends Controller
         return $assignment->load(['employee', 'site', 'department', 'position']);
     }
 
+    /**
+     * Deleting a person from Affectations deletes them from Personnel too
+     * (user's rule, 2026-11-10: the two lists stay in step both ways) —
+     * the same soft delete as EmployeeController@destroy, so their history
+     * (assignments, pointage…) is kept in the database. Removing a person is
+     * a Personnel action, so it needs that session.
+     */
     public function destroy(Request $request, Assignment $assignment)
     {
         $this->ensureSiteAccess($request, $assignment->site_id);
-        $employeeName = $assignment->employee->full_name;
-        $assignment->delete();
+        $employee = $assignment->employee;
+        abort_unless($employee, 404, 'Cette personne a déjà été supprimée.');
+        abort_unless(
+            $request->user()->hasModule('personnel'),
+            403,
+            "Supprimer une personne demande l'accès à la session Personnel."
+        );
+        $this->ensureSiteAccess($request, $employee->site_id);
 
-        AuditLogger::log('assignment.deleted', "Affectation supprimée — {$employeeName}", $assignment->site_id, $assignment);
+        $employee->delete();
 
-        return response()->json(['message' => 'Affectation supprimée.']);
+        AuditLogger::log('employee.deleted', "Employé supprimé depuis Affectations — {$employee->full_name}", $employee->site_id, $employee);
+
+        return response()->json(['message' => 'Personne supprimée de Personnel, des Affectations et des Entrées.']);
     }
 }

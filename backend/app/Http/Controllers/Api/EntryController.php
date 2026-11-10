@@ -18,7 +18,10 @@ class EntryController extends Controller
 
     public function index(Request $request)
     {
-        $query = Entry::with(['employee', 'site', 'department', 'position']);
+        // A person deleted in Personnel / Affectations disappears from
+        // Entrées too (soft delete: the row is kept, just no longer listed).
+        $query = Entry::with(['employee', 'site', 'department', 'position'])
+            ->where(fn ($q) => $q->whereNull('employee_id')->orWhereHas('employee'));
         $this->scopeToSite($query, $request);
 
         if ($search = $request->query('search')) {
@@ -134,10 +137,34 @@ class EntryController extends Controller
         return $entry->load(['employee', 'site', 'department', 'position']);
     }
 
+    /**
+     * Personnel, Affectations and Entrées delete together (user's rule,
+     * 2026-11-10): deleting the entry of an existing person deletes the
+     * PERSON (same soft delete as Personnel, so the entry row and the whole
+     * history stay in the database, just no longer listed anywhere). That
+     * needs the Personnel session. An entry with no linked employee is
+     * simply removed, as before.
+     */
     public function destroy(Request $request, Entry $entry)
     {
         $this->ensureSiteAccess($request, $entry->site_id);
         $fullName = $entry->full_name;
+        $employee = $entry->employee;
+
+        if ($employee) {
+            abort_unless(
+                $request->user()->hasModule('personnel'),
+                403,
+                "Supprimer une personne demande l'accès à la session Personnel."
+            );
+            $this->ensureSiteAccess($request, $employee->site_id);
+            $employee->delete();
+
+            AuditLogger::log('employee.deleted', "Employé supprimé depuis Entrées — {$employee->full_name}", $employee->site_id, $employee);
+
+            return response()->json(['message' => 'Personne supprimée de Personnel, des Affectations et des Entrées.']);
+        }
+
         $entry->delete();
 
         AuditLogger::log('entry.deleted', "Entrée supprimée — {$fullName}", $entry->site_id, $entry);

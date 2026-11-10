@@ -36,8 +36,10 @@ export default function PersonnelPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: number) => api.delete(`/employees/${id}`),
     onSuccess: () => {
-      toast.success('Employé supprimé.');
+      toast.success('Employé supprimé de Personnel, des Affectations et des Entrées.');
       queryClient.invalidateQueries({ queryKey: ['employees'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['entries'] });
       setDeleting(null);
     },
     onError: (err) => toast.error(apiErrorMessage(err)),
@@ -120,7 +122,7 @@ export default function PersonnelPage() {
       <ConfirmDialog
         open={!!deleting}
         title="Supprimer l'employé"
-        message={`Voulez-vous vraiment supprimer ${deleting?.full_name} ? Cette action est irréversible.`}
+        message={`${deleting?.full_name} sera supprimé(e) de Personnel, des Affectations ET des Entrées. Continuer ?`}
         onCancel={() => setDeleting(null)}
         onConfirm={() => deleting && deleteMutation.mutate(deleting.id)}
         isLoading={deleteMutation.isPending}

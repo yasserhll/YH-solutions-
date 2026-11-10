@@ -4,6 +4,8 @@ import toast from 'react-hot-toast';
 import { Plus, Pencil, Trash2, ArrowRightLeft } from 'lucide-react';
 import { api, apiErrorMessage } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
+import { useAuth } from '../contexts/AuthContext';
+import { hasModule } from '../utils/modules';
 import { useDepartments, usePositions, useSites } from '../hooks/useReferenceData';
 import type { Assignment, Employee, Paginated } from '../types';
 import { PageHeader } from '../components/ui/PageHeader';
@@ -25,6 +27,8 @@ export default function AssignmentsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Assignment | null>(null);
   const [deleting, setDeleting] = useState<Assignment | null>(null);
+  // Deleting here removes the person from Personnel too: needs that session (also enforced server-side).
+  const canDelete = hasModule(useAuth().user, 'personnel');
   const [transferring, setTransferring] = useState<Assignment | null>(null);
   const siteParams = useSiteParams();
   const queryClient = useQueryClient();
@@ -44,8 +48,10 @@ export default function AssignmentsPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: number) => api.delete(`/assignments/${id}`),
     onSuccess: () => {
-      toast.success('Affectation supprimée.');
+      toast.success('Personne supprimée de Personnel, des Affectations et des Entrées.');
       queryClient.invalidateQueries({ queryKey: ['assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      queryClient.invalidateQueries({ queryKey: ['entries'] });
       setDeleting(null);
     },
     onError: (err) => toast.error(apiErrorMessage(err)),
@@ -83,9 +89,11 @@ export default function AssignmentsPage() {
           <button className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => setEditing(a)}>
             <Pencil size={16} />
           </button>
-          <button className="rounded-md p-1.5 text-red-500 hover:bg-red-50" onClick={() => setDeleting(a)}>
-            <Trash2 size={16} />
-          </button>
+          {canDelete && (
+            <button className="rounded-md p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/15" title="Supprimer la personne" onClick={() => setDeleting(a)}>
+              <Trash2 size={16} />
+            </button>
+          )}
         </div>
       ),
     },
@@ -145,8 +153,8 @@ export default function AssignmentsPage() {
 
       <ConfirmDialog
         open={!!deleting}
-        title="Supprimer l'affectation"
-        message="Voulez-vous vraiment supprimer cette affectation ?"
+        title="Supprimer la personne"
+        message={`${deleting?.employee?.full_name ?? 'Cette personne'} sera supprimée des Affectations, de Personnel ET des Entrées. Continuer ?`}
         onCancel={() => setDeleting(null)}
         onConfirm={() => deleting && deleteMutation.mutate(deleting.id)}
         isLoading={deleteMutation.isPending}
