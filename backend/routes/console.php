@@ -16,3 +16,13 @@ Artisan::command('contrats:cdi-auto', function () {
 })->purpose('Passe en CDI les 2èmes CDD (ou suivants) arrivés à leur fin');
 
 Schedule::command('contrats:cdi-auto')->dailyAt('00:10');
+
+// Device notifications (Web Push) for contracts entering "bientôt" / "terminé".
+// Also sent right after any contract change and on the top-bar bell.
+Artisan::command('contrats:notifier', function () {
+    $this->info(app(\App\Services\ContractAlerts::class)->notifyDue().' contrat(s) notifié(s).');
+})->purpose('Envoie les notifications appareil des contrats bientôt terminés / terminés');
+
+// Every minute: a contract crossing into "bientôt" / "terminé" at midnight is
+// pushed within the minute (changes made in the app are pushed instantly).
+Schedule::command('contrats:notifier')->everyMinute()->withoutOverlapping();

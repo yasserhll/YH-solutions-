@@ -61,15 +61,18 @@ cd /var/www/apps/YH-solutions && git pull --ff-only
 
 Si la commande refuse, ne forcez rien.
 
-### 5. Migrations, seulement s'il y en a
+### 5. Dépendances PHP et migrations, seulement s'il y en a
 
 ```bash
 cd backend
+composer install --no-dev --optimize-autoloader   # seulement si composer.json ou composer.lock a changé
 php artisan migrate:status --pending
 php artisan migrate --force
 ```
 
-Avant de lancer `migrate --force`, ouvrez les nouveaux fichiers de migration et vérifiez qu'ils ne contiennent pas `drop`, `truncate` ou `delete`.
+Avant de lancer `migrate --force`, ouvrez les nouveaux fichiers de migration et vérifiez que leur méthode `up()` ne contient pas `drop`, `truncate` ou `delete` (un `drop` dans `down()` ne sert qu'à annuler : `migrate` ne l'exécute pas).
+
+Notifications sur l'appareil (Web Push) : elles demandent un site en **HTTPS**. Les clés sont créées toutes seules au premier usage et rangées dans la table `app_settings` : ne videz jamais cette table, sinon tous les appareils déjà activés cessent de recevoir les notifications. Une alerte part immédiatement quand un contrat est créé ou modifié. Pour celles qui commencent à minuit (contrat qui entre dans ses 10 derniers jours, contrat qui se termine), le serveur vérifie chaque minute, **à condition que le cron Laravel soit installé**. À faire une seule fois : `crontab -e`, puis ajoutez la ligne `* * * * * cd /var/www/apps/YH-solutions/backend && php artisan schedule:run >> /dev/null 2>&1`. Pour vérifier : `php artisan schedule:list` doit afficher `contrats:notifier` chaque minute.
 
 ### 6. Rafraîchir le backend
 

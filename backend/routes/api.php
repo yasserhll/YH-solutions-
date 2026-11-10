@@ -27,6 +27,7 @@ use App\Http\Controllers\Api\LeaveRequestController;
 use App\Http\Controllers\Api\OvertimeEntryController;
 use App\Http\Controllers\Api\OvertimeMonthController;
 use App\Http\Controllers\Api\PositionController;
+use App\Http\Controllers\Api\PushSubscriptionController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SiteController;
 use App\Http\Controllers\Api\SuspensionController;
@@ -35,9 +36,19 @@ use Illuminate\Support\Facades\Route;
 
 Route::post('/login', [AuthController::class, 'login']);
 
+// Web Push: the public key is public by nature; `renew` is called by the
+// service worker, which has no token (authorized by the old endpoint).
+Route::get('/push/key', [PushSubscriptionController::class, 'key']);
+Route::post('/push/renew', [PushSubscriptionController::class, 'renew'])->middleware('throttle:30,1');
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
+
+    // "Notifications sur cet appareil" (Web Push), for any account.
+    Route::post('/push/subscriptions', [PushSubscriptionController::class, 'store']);
+    Route::delete('/push/subscriptions', [PushSubscriptionController::class, 'destroy']);
+    Route::post('/push/test', [PushSubscriptionController::class, 'test']);
 
     // Every route below is gated by the session (module) it belongs to —
     // `module:<key>` (EnsureModuleAccess), never by role. Which sessions an

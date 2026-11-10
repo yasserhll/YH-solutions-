@@ -29,6 +29,17 @@ class Contract extends Model
 
     protected $appends = ['state', 'days_left', 'cdd_number'];
 
+    /**
+     * Any change to a contract (new entry, renewal, corrected end date…) may
+     * put it in the alert window: device notifications go out right after
+     * the response, not at the next scheduled check.
+     */
+    protected static function booted(): void
+    {
+        static::saved(fn () => \App\Services\ContractAlerts::soon());
+        static::deleted(fn () => \App\Services\ContractAlerts::soon());
+    }
+
     protected function casts(): array
     {
         return [

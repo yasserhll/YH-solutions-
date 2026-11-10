@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Assignment;
 use App\Models\Attendance;
 use App\Models\Contract;
+use App\Services\ContractAlerts;
 use App\Models\Employee;
 use App\Models\EmployeeExit;
 use App\Services\AuditLogger;
@@ -60,6 +61,9 @@ class ContractController extends Controller
     public function summary(Request $request)
     {
         Contract::promoteDueToCdi();
+        // Device notifications for new alerts, after the response is sent
+        // (the bell calls this on every page; throttled to once a minute).
+        dispatch(fn () => app(ContractAlerts::class)->notifyDueThrottled())->afterResponse();
 
         $count = fn (string $state) => $this->scoped($request)->inState($state)->count();
 

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
+import { disablePushOnThisDevice } from '../hooks/usePushNotifications';
 import type { AuthUser } from '../types';
 
 interface AuthContextValue {
@@ -45,6 +46,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function logout() {
     try {
+      // This device must stop receiving the account's notifications.
+      await disablePushOnThisDevice().catch(() => undefined);
       await api.post('/logout');
     } finally {
       localStorage.removeItem('token');

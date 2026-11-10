@@ -47,6 +47,9 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Device notifications (Web Push): `push` / `notificationclick`
+        // handlers live in public/push-sw.js (see usePushNotifications).
+        importScripts: ['/push-sw.js'],
         cleanupOutdatedCaches: true,
         clientsClaim: true,
         navigateFallback: '/index.html',
