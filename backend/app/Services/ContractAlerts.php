@@ -60,7 +60,8 @@ class ContractAlerts
      */
     public function notifyDue(): int
     {
-        return Cache::lock('contract-alerts-send', 120)->block(30, fn () => $this->send());
+        // CIN / permis alerts (DocumentAlerts) ride along: same lock, same triggers.
+        return Cache::lock('contract-alerts-send', 120)->block(30, fn () => $this->send() + app(DocumentAlerts::class)->send());
     }
 
     private function send(): int

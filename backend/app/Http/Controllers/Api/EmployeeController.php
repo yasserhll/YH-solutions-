@@ -90,6 +90,12 @@ class EmployeeController extends Controller
     {
         $data = $request->validated();
         $data['site_id'] = $this->resolveSiteId($request);
+        if (array_key_exists('is_driver', $data)) {
+            $data['driver_opt_out'] = ! $data['is_driver'];
+            if (! $data['is_driver']) {
+                $data['license_expiry_date'] = null;
+            }
+        }
 
         $employee = Employee::create($data);
 
@@ -124,6 +130,12 @@ class EmployeeController extends Controller
         $this->ensureSiteAccess($request, $employee->site_id);
 
         $data = $request->validated();
+        if (array_key_exists('is_driver', $data)) {
+            $data['driver_opt_out'] = ! $data['is_driver'];
+            if (! $data['is_driver']) {
+                $data['license_expiry_date'] = null;
+            }
+        }
         if (! $request->user()->isSuperAdmin()) {
             $data['site_id'] = $employee->site_id;
         }

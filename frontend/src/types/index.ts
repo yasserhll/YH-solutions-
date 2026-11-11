@@ -36,6 +36,7 @@ export type ModuleKey =
   | 'conges'
   | 'sanctions'
   | 'hse'
+  | 'suivi_atit'
   | 'mouvements'
   | 'contrats'
   | 'affectations'
@@ -82,6 +83,10 @@ export interface Employee {
   status: EmployeeStatus;
   phone: string | null;
   notes: string | null;
+  cin_expiry_date: string | null;
+  is_driver: boolean;
+  license_expiry_date: string | null;
+  driver_opt_out?: boolean;
   site?: Site;
   department?: Department | null;
   position?: Position | null;
@@ -219,6 +224,86 @@ export interface Suspension {
 export type HseGeneralState = 'conforme' | 'non_conforme';
 
 /** Mirrors the paper "RAPPORT JOURNALIER HSE" form (réf. RJ-HSE-TRP-02) field for field. */
+export type IdDocumentKind = 'cin' | 'permis';
+export type IdDocumentState = 'valide' | 'bientot' | 'expire' | 'manquante';
+
+/** Contrats → CIN / Permis: one active employee and the expiry of the document shown. */
+export interface EmployeeDocument {
+  id: number;
+  full_name: string;
+  matricule: string | null;
+  site: Site | null;
+  position: Position | null;
+  entry_date: string | null;
+  cin_expiry_date: string | null;
+  is_driver: boolean;
+  license_expiry_date: string | null;
+  expiry_date: string | null;
+  days_left: number | null;
+  state: IdDocumentState;
+}
+
+export interface EmployeeDocumentSummary {
+  doc: IdDocumentKind;
+  alert_days: number;
+  validity_years: number;
+  total: number;
+  expire: number;
+  bientot: number;
+  valide: number;
+  manquante: number;
+}
+
+export type HseAccidentType = 'accident' | 'incident';
+export type HseAccidentDecision = 'map' | 'repos_maladie' | 'licenciement' | 'avertissement' | 'en_poste' | 'autre';
+
+/** One accident / incident de travail (Suivi ATIT) — a line of the "BILAN GLOBAL DES ACCIDENTS". */
+export interface HseAccident {
+  id: number;
+  site_id: number;
+  site?: Site;
+  type: HseAccidentType;
+  occurred_on: string;
+  occurred_time: string | null;
+  shift: 1 | 2 | 3 | null;
+  zone: string | null;
+  employee_id: number | null;
+  employee?: { id: number; full_name: string; entry_date: string | null } | null;
+  driver_name: string;
+  driver_age: number | null;
+  driver_seniority: string | null;
+  equipment: string | null;
+  description: string;
+  causes: string | null;
+  decision: HseAccidentDecision | null;
+  decision_days: number | null;
+  decision_note: string | null;
+  decision_label: string | null;
+  notes: string | null;
+  created_by: number | null;
+  creator?: { id: number; name: string } | null;
+}
+
+export interface HseAccidentSummary {
+  totals: {
+    total: number;
+    accidents: number;
+    incidents: number;
+    licenciements: number;
+    map_days: number;
+    map_count: number;
+    sick_days: number;
+    sick_count: number;
+    last_accident_date: string | null;
+  };
+  by_month: { month: string; accidents: number; incidents: number }[];
+  by_site: { site_id: number; site_name: string; accidents: number; incidents: number }[];
+  by_shift: { shift: number | null; count: number }[];
+  by_decision: { decision: HseAccidentDecision | null; label: string; count: number }[];
+  repeat_drivers: { label: string; count: number }[];
+  repeat_equipment: { label: string; count: number }[];
+}
+
 export interface HseReport {
   id: number;
   site_id: number;

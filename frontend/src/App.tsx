@@ -28,6 +28,7 @@ import SettingsPage from './pages/SettingsPage';
 import HseReportsPage from './pages/HseReportsPage';
 import HseDashboardPage from './pages/HseDashboardPage';
 import HseUsersPage from './pages/HseUsersPage';
+import HseAccidentsPage from './pages/HseAccidentsPage';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 10_000 } },
@@ -223,6 +224,14 @@ export default function App() {
                     element={
                       <RequireModule module="hse">
                         <HseReportsPage />
+                      </RequireModule>
+                    }
+                  />
+                  <Route
+                    path="/hse/suivi-atit"
+                    element={
+                      <RequireModule module="suivi_atit">
+                        <HseAccidentsPage />
                       </RequireModule>
                     }
                   />

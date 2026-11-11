@@ -5,6 +5,7 @@ import { Plus, Pencil, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 import { api, apiErrorMessage } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
+import { IdDocumentFields, isDriverPosition, startsAsDriver, type IdDocumentValues } from '../components/ui/IdDocumentFields';
 import { useAuth } from '../contexts/AuthContext';
 import { hasModule } from '../utils/modules';
 import { useUrlTab } from '../hooks/useUrlTab';
@@ -220,13 +221,24 @@ function EntryFormModal({ entry, onClose }: { entry: Entry | null; onClose: () =
     site_id: entry?.site_id ?? '',
     entry_date: entry?.entry_date?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
   });
+  const [docs, setDocs] = useState<IdDocumentValues>({
+    cin_expiry_date: entry?.employee?.cin_expiry_date?.slice(0, 10) ?? '',
+    is_driver: startsAsDriver(entry?.employee, entry?.position?.name),
+    license_expiry_date: entry?.employee?.license_expiry_date?.slice(0, 10) ?? '',
+  });
+  // Only an entry linked to a fiche employé carries the CIN / permis (they live on the employee).
+  const showDocs = !entry || !!entry.employee_id;
 
   const mutation = useMutation({
-    mutationFn: () => (entry ? api.put(`/entries/${entry.id}`, form) : api.post('/entries', form)),
+    mutationFn: () => {
+      const payload = showDocs ? { ...form, ...docs } : form;
+      return entry ? api.put(`/entries/${entry.id}`, payload) : api.post('/entries', payload);
+    },
     onSuccess: () => {
       toast.success(entry ? 'Entrée mise à jour.' : "Entrée enregistrée — le personnel et l'affectation ont été créés.");
       queryClient.invalidateQueries({ queryKey: ['entries'] });
       queryClient.invalidateQueries({ queryKey: ['employees'] });
+      queryClient.invalidateQueries({ queryKey: ['employee-documents'] });
       onClose();
     },
     onError: (err) => toast.error(apiErrorMessage(err)),
@@ -253,7 +265,14 @@ function EntryFormModal({ entry, onClose }: { entry: Entry | null; onClose: () =
           </SelectField>
         )}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <SelectField label="Fonction" value={form.position_id} onChange={(e) => setForm({ ...form, position_id: e.target.value })}>
+          <SelectField
+            label="Fonction"
+            value={form.position_id}
+            onChange={(e) => {
+              setForm({ ...form, position_id: e.target.value });
+              if (isDriverPosition(positions?.find((p) => String(p.id) === e.target.value)?.name)) setDocs((d) => ({ ...d, is_driver: true }));
+            }}
+          >
             <option value="">—</option>
             {positions?.map((p) => (
               <option key={p.id} value={p.id}>
@@ -278,6 +297,7 @@ function EntryFormModal({ entry, onClose }: { entry: Entry | null; onClose: () =
           value={form.entry_date}
           onChange={(e) => setForm({ ...form, entry_date: e.target.value })}
         />
+        {showDocs && <IdDocumentFields value={docs} onChange={setDocs} />}
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>
             Annuler

@@ -284,6 +284,124 @@ class ExcelExportService
         ]);
     }
 
+    /**
+     * Replica of the company's "BILAN GLOBAL DES ACCIDENTS" workbook (Suivi
+     * ATIT), values copied from the reference .xlsx: title merged over
+     * B2:M2 (Calibri 18 bold), group row 4 — "📋 Informations Générales"
+     * B4:F4, "👤Profil du Chauffeur" G4:I4, "🚛 Matériel Impliqué" J4 (grey
+     * D9D9D9), "🔍Détails de l’événement" K4:K5 (orange F8CBAD), "⚠️ Causes
+     * de l'accident" L4:L5 (red FF0000), "⚖️ Décision…" M4:M5 (green
+     * E2EFDA) — header row 5, data from row 6, Arial 13 bold centred and
+     * wrapped, thin borders, same column widths. Free-text cells are written
+     * the way the hand-made file writes them ("29/04/2026 - Mercredi",
+     * "18H30", "2 ème", "41 Ans", "MAP - 6 Jours"). A "Type" column N is only
+     * added when accidents and incidents are mixed.
+     *
+     * @param  array<int, \App\Models\HseAccident>  $rows
+     */
+    public function streamAccidentBilan(string $filename, string $title, array $rows, bool $withType): StreamedResponse
+    {
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Bilan ATIT');
+        $spreadsheet->getDefaultStyle()->getFont()->setName('Calibri')->setSize(11);
+        $last = $withType ? 'N' : 'M';
+
+        $widths = ['A' => 1.7, 'B' => 20, 'C' => 40.7, 'D' => 33, 'E' => 11.7, 'F' => 22.4, 'G' => 38.1, 'H' => 21.3, 'I' => 21.4, 'J' => 32.6, 'K' => 48.9, 'L' => 46.8, 'M' => 34.8, 'N' => 16];
+        foreach ($widths as $column => $width) {
+            $sheet->getColumnDimension($column)->setWidth($width);
+        }
+
+        $sheet->setCellValue('B2', $title);
+        $sheet->mergeCells("B2:{$last}2");
+        $sheet->getStyle('B2')->applyFromArray([
+            'font' => ['bold' => true, 'size' => 18],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+        ]);
+        $sheet->getRowDimension(2)->setRowHeight(35.4);
+
+        $sheet->setCellValue('B4', '📋 Informations Générales');
+        $sheet->setCellValue('G4', '👤Profil du Chauffeur');
+        $sheet->setCellValue('J4', '🚛 Matériel Impliqué');
+        $sheet->setCellValue('K4', '🔍Détails de l’événement');
+        $sheet->setCellValue('L4', $withType ? '⚠️ Causes' : "⚠️ Causes de l'accident");
+        $sheet->setCellValue('M4', "⚖️ Décision prise à\n l'encontre du chauffeur");
+        $sheet->fromArray(['Site', "Date de l'accident (jour)", " Heure de l'accident", 'Shift ', 'Zone', 'Nom du chauffeur ', 'Âge', 'Ancienneté ', 'N° Camion ou autre'], null, 'B5');
+        if ($withType) {
+            $sheet->setCellValue('N4', 'Type');
+            $sheet->mergeCells('N4:N5');
+            $sheet->setCellValue('C5', "Date de l'événement (jour)");
+            $sheet->setCellValue('D5', " Heure de l'événement");
+        }
+        foreach (['B4:F4', 'G4:I4', 'K4:K5', 'L4:L5', 'M4:M5'] as $range) {
+            $sheet->mergeCells($range);
+        }
+        $sheet->getRowDimension(4)->setRowHeight(22.2);
+        $sheet->getRowDimension(5)->setRowHeight(28.2);
+
+        $thin = ['borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]];
+        $center = ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER, 'wrapText' => true];
+        $fill = fn (string $rgb) => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF'.$rgb]];
+
+        $sheet->getStyle("B4:{$last}5")->applyFromArray($thin + ['font' => ['name' => 'Arial', 'size' => 13], 'alignment' => $center]);
+        $sheet->getStyle('B4:J4')->getFill()->applyFromArray($fill('D9D9D9'));
+        $sheet->getStyle('K4')->getFill()->applyFromArray($fill('F8CBAD'));
+        $sheet->getStyle('L4')->getFill()->applyFromArray($fill('FF0000'));
+        $sheet->getStyle('M4')->getFill()->applyFromArray($fill('E2EFDA'));
+        $sheet->getStyle('B4')->getFont()->setBold(true);
+        $sheet->getStyle('M4')->getFont()->setBold(true);
+        $sheet->getStyle('B5:J5')->getFont()->setBold(true);
+        if ($withType) {
+            $sheet->getStyle('N4')->applyFromArray(['font' => ['bold' => true], 'fill' => $fill('D9D9D9')]);
+        }
+
+        $days = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+        $line = 6;
+        foreach ($rows as $a) {
+            $time = $a->occurred_time ? ((int) substr($a->occurred_time, 0, 2)).'H'.substr($a->occurred_time, 3, 2) : '';
+            $sheet->fromArray([
+                $a->site?->name,
+                $a->occurred_on->format('d/m/Y').' - '.$days[$a->occurred_on->dayOfWeek],
+                $time,
+                match ($a->shift) { 1 => '1er', 2 => '2 ème', 3 => '3 ème', default => '' },
+                $a->zone,
+                $a->driver_name,
+                $a->driver_age ? $a->driver_age.' Ans' : '',
+                $a->driver_seniority,
+                $a->equipment,
+                $a->description,
+                $a->causes,
+                $a->decision_label,
+            ], null, "B{$line}");
+            if ($withType) {
+                $sheet->setCellValue("N{$line}", $a->type === 'incident' ? 'Incident' : 'Accident');
+            }
+            // Same generous heights as the hand-made file, growing with the longest text.
+            $longest = max(mb_strlen((string) $a->description) / 45, mb_strlen((string) $a->causes) / 43, mb_strlen((string) $a->zone) / 20, 1);
+            $sheet->getRowDimension($line)->setRowHeight(min(36 + 18 * ceil($longest), 140));
+            $line++;
+        }
+
+        if ($line > 6) {
+            $end = $line - 1;
+            $sheet->getStyle("B6:{$last}{$end}")->applyFromArray($thin + [
+                'font' => ['name' => 'Arial', 'size' => 13, 'bold' => true],
+                'alignment' => $center,
+            ]);
+            $sheet->getStyle("B6:{$last}{$end}")->getNumberFormat()->setFormatCode('@');
+        }
+
+        $writer = new Xlsx($spreadsheet);
+
+        return new StreamedResponse(function () use ($writer) {
+            $writer->save('php://output');
+        }, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, private',
+        ]);
+    }
+
     private function styleFormLabel(Worksheet $sheet, string $cell, ?string $fill): void
     {
         $sheet->getStyle($cell)->getFont()->setBold(true);

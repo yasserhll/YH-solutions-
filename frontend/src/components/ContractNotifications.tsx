@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { AlertCircle, ArrowRight, Bell, CheckCircle2, Clock, Loader2, Smartphone, X } from 'lucide-react';
+import { AlertCircle, ArrowRight, Bell, CheckCircle2, Clock, IdCard, Loader2, Smartphone, Truck, X } from 'lucide-react';
 import clsx from 'clsx';
 import { api } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { useSiteParams } from '../hooks/useSiteParams';
 import { syncPushSubscription, usePushNotifications, type PushStatus } from '../hooks/usePushNotifications';
 import { hasModule } from '../utils/modules';
-import type { Contract, ContractSummary, Paginated } from '../types';
+import type { Contract, ContractSummary, EmployeeDocument, EmployeeDocumentSummary, IdDocumentKind, Paginated } from '../types';
 import { autoCdi, contractLabel } from '../utils/contracts';
 
 const DAY = 86_400_000;
@@ -53,9 +53,25 @@ function statusText(c: Contract) {
   return autoCdi(c) ? `CDI auto dans ${d} j` : `Fin dans ${d} j`;
 }
 
+function docStatusText(d: EmployeeDocument, doc: IdDocumentKind) {
+  const days = d.days_left ?? 0;
+  const fem = doc === 'cin' ? 'e' : '';
+  if (days < 0) return `Expiré${fem} depuis ${-days} j`;
+  if (days === 0) return "Expire aujourd'hui";
+  return `Expire dans ${days} j`;
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <li className="sticky top-0 z-[1] bg-slate-50/95 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 backdrop-blur dark:bg-slate-800/90 dark:text-slate-500">
+      {children}
+    </li>
+  );
+}
+
 const pushHints: Record<PushStatus, string> = {
   on: 'Activées : les alertes arrivent sur cet appareil, même application fermée.',
-  off: 'Recevez les alertes de contrats directement sur cet appareil.',
+  off: 'Recevez les alertes de contrats, CIN et permis directement sur cet appareil.',
   denied: 'Bloquées par le navigateur. Autorisez les notifications pour ce site dans ses réglages, puis réessayez.',
   'ios-install': "Sur iPhone / iPad : touchez Partager › « Sur l'écran d'accueil », ouvrez l'application depuis son icône, puis activez ici.",
   unsupported: 'Ce navigateur ne prend pas en charge les notifications (une connexion HTTPS est nécessaire).',
@@ -126,7 +142,21 @@ export function ContractNotifications({ autoOpen }: { autoOpen: boolean }) {
     refetchInterval: 60_000,
   });
   const summary = summaryQuery.data;
-  const count = (summary?.bientot ?? 0) + (summary?.termine ?? 0);
+
+  // CIN / permis expiring within 30 days or already expired (Contrats → CIN / Permis).
+  const docSummary = (doc: IdDocumentKind) => ({
+    queryKey: ['employee-documents', 'summary', doc, siteParams],
+    queryFn: () => api.get<EmployeeDocumentSummary>('/employee-documents/summary', { params: { ...siteParams, doc } }).then((r) => r.data),
+    enabled,
+    refetchInterval: 60_000,
+  });
+  const cinSummary = useQuery(docSummary('cin')).data;
+  const permisSummary = useQuery(docSummary('permis')).data;
+  const cinCount = (cinSummary?.expire ?? 0) + (cinSummary?.bientot ?? 0);
+  const permisCount = (permisSummary?.expire ?? 0) + (permisSummary?.bientot ?? 0);
+  const count = (summary?.bientot ?? 0) + (summary?.termine ?? 0) + cinCount + permisCount;
+  const lateCount = (summary?.termine ?? 0) + (cinSummary?.expire ?? 0) + (permisSummary?.expire ?? 0);
+  const soonCount = (summary?.bientot ?? 0) + (cinSummary?.bientot ?? 0) + (permisSummary?.bientot ?? 0);
 
   const listQuery = useQuery({
     queryKey: ['contracts', 'notifications', siteParams],
@@ -136,6 +166,16 @@ export function ContractNotifications({ autoOpen }: { autoOpen: boolean }) {
         .then((r) => r.data),
     enabled: enabled && (open || count > 0),
   });
+  const docList = (doc: IdDocumentKind, n: number) => ({
+    queryKey: ['employee-documents', 'notifications', doc, siteParams],
+    queryFn: () =>
+      api
+        .get<Paginated<EmployeeDocument>>('/employee-documents', { params: { ...siteParams, doc, state: 'alerte', per_page: 4 } })
+        .then((r) => r.data),
+    enabled: enabled && n > 0 && (open || count > 0),
+  });
+  const cinRows = useQuery(docList('cin', cinCount)).data?.data ?? [];
+  const permisRows = useQuery(docList('permis', permisCount)).data?.data ?? [];
 
   // Keep this device registered on the server (once per account / app start)…
   const userId = user?.id;
@@ -151,13 +191,14 @@ export function ContractNotifications({ autoOpen }: { autoOpen: boolean }) {
       if (e.data?.type === 'push-received') {
         queryClient.invalidateQueries({ queryKey: ['contracts-summary'] });
         queryClient.invalidateQueries({ queryKey: ['contracts'] });
+        queryClient.invalidateQueries({ queryKey: ['employee-documents'] });
       }
     };
     navigator.serviceWorker.addEventListener('message', onMessage);
     return () => navigator.serviceWorker.removeEventListener('message', onMessage);
   }, [enabled, queryClient]);
 
-  const signature = summary ? `${new Date().toISOString().slice(0, 10)}:${summary.termine}:${summary.bientot}` : null;
+  const signature = summary ? `${new Date().toISOString().slice(0, 10)}:${summary.termine}:${summary.bientot}:${cinCount}:${permisCount}` : null;
 
   // Auto-open on the Dashboard, once per day / per new set of alerts.
   useEffect(() => {
@@ -200,9 +241,9 @@ export function ContractNotifications({ autoOpen }: { autoOpen: boolean }) {
           'relative rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200',
           open && 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200',
         )}
-        aria-label={count > 0 ? `Notifications : ${count} contrat(s) à traiter` : 'Notifications'}
+        aria-label={count > 0 ? `Notifications : ${count} alerte(s) à traiter` : 'Notifications'}
         aria-expanded={open}
-        title={count > 0 ? `${count} contrat(s) à traiter` : 'Aucune notification'}
+        title={count > 0 ? `${count} alerte(s) : contrats, CIN, permis` : 'Aucune notification'}
       >
         <Bell size={20} />
         {count > 0 && (
@@ -227,17 +268,20 @@ export function ContractNotifications({ autoOpen }: { autoOpen: boolean }) {
           <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
             <div className="min-w-0">
               <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Notifications</h2>
-              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Contrats à traiter</p>
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Contrats, CIN et permis à traiter</p>
             </div>
             <div className="flex items-center gap-1.5">
-              {(summary?.termine ?? 0) > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-md bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 ring-1 ring-inset ring-red-200 dark:bg-red-500/10 dark:text-red-400 dark:ring-red-500/25">
-                  {summary?.termine} terminé{(summary?.termine ?? 0) > 1 ? 's' : ''}
+              {lateCount > 0 && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-md bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 ring-1 ring-inset ring-red-200 dark:bg-red-500/10 dark:text-red-400 dark:ring-red-500/25"
+                  title="Contrats terminés, CIN et permis expirés"
+                >
+                  {lateCount} dépassé{lateCount > 1 ? 's' : ''}
                 </span>
               )}
-              {(summary?.bientot ?? 0) > 0 && (
+              {soonCount > 0 && (
                 <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:ring-amber-500/25">
-                  {summary?.bientot} bientôt
+                  {soonCount} bientôt
                 </span>
               )}
               <button
@@ -256,11 +300,13 @@ export function ContractNotifications({ autoOpen }: { autoOpen: boolean }) {
               <CheckCircle2 size={26} className="text-emerald-500" />
               <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Tout est à jour</p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Aucun contrat ne se termine dans les {summary?.alert_days ?? 10} prochains jours.
+                Aucun contrat ne se termine dans les {summary?.alert_days ?? 10} prochains jours, aucune CIN ni aucun permis n'expire dans les{' '}
+                {cinSummary?.alert_days ?? 30} prochains jours.
               </p>
             </div>
           ) : (
             <ul className="min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto overscroll-contain dark:divide-slate-800 sm:max-h-[420px]">
+              {rows.length > 0 && (cinRows.length > 0 || permisRows.length > 0) && <SectionTitle>Contrats</SectionTitle>}
               {rows.map((c) => {
                 const late = (c.days_left ?? 0) < 0;
                 return (
@@ -299,6 +345,55 @@ export function ContractNotifications({ autoOpen }: { autoOpen: boolean }) {
                   </li>
                 );
               })}
+              {(
+                [
+                  { doc: 'cin', title: 'CIN', items: cinRows, total: cinCount, icon: IdCard },
+                  { doc: 'permis', title: 'Permis', items: permisRows, total: permisCount, icon: Truck },
+                ] as const
+              ).map((g) =>
+                g.items.length === 0
+                  ? null
+                  : [
+                      <SectionTitle key={`${g.doc}-title`}>
+                        {g.title}
+                        {g.total > g.items.length ? ` · ${g.items.length} sur ${g.total}` : ''}
+                      </SectionTitle>,
+                      ...g.items.map((d) => {
+                        const late = (d.days_left ?? 0) < 0;
+                        return (
+                          <li key={`${g.doc}-${d.id}`}>
+                            <Link
+                              to={`/contrats?vue=${g.doc}&state=a_traiter`}
+                              onClick={close}
+                              className="flex gap-3 px-4 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                            >
+                              <span
+                                className={clsx(
+                                  'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
+                                  late
+                                    ? 'bg-red-50 text-red-600 dark:bg-red-500/15 dark:text-red-400'
+                                    : 'bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400',
+                                )}
+                              >
+                                <g.icon size={16} />
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-baseline justify-between gap-2">
+                                  <span className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">{d.full_name}</span>
+                                  <span className={clsx('shrink-0 text-xs font-medium', late ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400')}>
+                                    {docStatusText(d, g.doc)}
+                                  </span>
+                                </div>
+                                <div className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
+                                  {[g.title, d.site?.name, d.expiry_date ? `expire le ${fmtDate(d.expiry_date)}` : null].filter(Boolean).join(' · ')}
+                                </div>
+                              </div>
+                            </Link>
+                          </li>
+                        );
+                      }),
+                    ],
+              )}
             </ul>
           )}
 

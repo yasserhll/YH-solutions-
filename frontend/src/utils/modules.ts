@@ -13,6 +13,7 @@ export const MODULES: { key: ModuleKey; label: string; path: string }[] = [
   { key: 'conges', label: 'Congés', path: '/conges' },
   { key: 'sanctions', label: 'Sanctions', path: '/sanctions' },
   { key: 'hse', label: 'Rapports HSE', path: '/hse/rapports' },
+  { key: 'suivi_atit', label: 'Suivi ATIT', path: '/hse/suivi-atit' },
   { key: 'mouvements', label: 'Entrées / Sorties', path: '/mouvements' },
   { key: 'affectations', label: 'Affectations', path: '/affectations' },
   { key: 'heures_sup', label: 'Heures supplémentaires', path: '/heures-supplementaires' },

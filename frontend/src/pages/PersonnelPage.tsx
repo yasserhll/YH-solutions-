@@ -17,6 +17,7 @@ import { StatusBadge } from '../components/ui/StatusBadge';
 import { Modal } from '../components/ui/Modal';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { SelectField, TextField } from '../components/ui/Field';
+import { IdDocumentFields, isDriverPosition, startsAsDriver } from '../components/ui/IdDocumentFields';
 
 export default function PersonnelPage() {
   const { user } = useAuth();
@@ -152,6 +153,9 @@ function EmployeeFormModal({ employee, isSuperAdmin, onClose }: { employee: Empl
     entry_date: employee?.entry_date?.slice(0, 10) ?? '',
     phone: employee?.phone ?? '',
     status: employee?.status ?? 'actif',
+    cin_expiry_date: employee?.cin_expiry_date?.slice(0, 10) ?? '',
+    is_driver: startsAsDriver(employee, employee?.position?.name),
+    license_expiry_date: employee?.license_expiry_date?.slice(0, 10) ?? '',
   });
 
   const mutation = useMutation({
@@ -159,6 +163,7 @@ function EmployeeFormModal({ employee, isSuperAdmin, onClose }: { employee: Empl
     onSuccess: () => {
       toast.success(employee ? 'Employé mis à jour.' : 'Employé créé.');
       queryClient.invalidateQueries({ queryKey: ['employees'] });
+      queryClient.invalidateQueries({ queryKey: ['employee-documents'] });
       onClose();
     },
     onError: (err) => toast.error(apiErrorMessage(err)),
@@ -198,7 +203,17 @@ function EmployeeFormModal({ employee, isSuperAdmin, onClose }: { employee: Empl
               </option>
             ))}
           </SelectField>
-          <SelectField label="Fonction" value={form.position_id} onChange={(e) => setForm({ ...form, position_id: e.target.value })}>
+          <SelectField
+            label="Fonction"
+            value={form.position_id}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                position_id: e.target.value,
+                is_driver: form.is_driver || isDriverPosition(positions?.find((p) => String(p.id) === e.target.value)?.name),
+              })
+            }
+          >
             <option value="">—</option>
             {positions?.map((p) => (
               <option key={p.id} value={p.id}>
@@ -217,6 +232,10 @@ function EmployeeFormModal({ employee, isSuperAdmin, onClose }: { employee: Empl
           <TextField label="Téléphone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
         </div>
         <TextField label="Établissement" value={form.establishment} onChange={(e) => setForm({ ...form, establishment: e.target.value })} />
+        <IdDocumentFields
+          value={{ cin_expiry_date: form.cin_expiry_date, is_driver: form.is_driver, license_expiry_date: form.license_expiry_date }}
+          onChange={(d) => setForm({ ...form, ...d })}
+        />
         {employee && (
           <SelectField label="Statut" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as EmployeeStatus })}>
             <option value="actif">Actif</option>

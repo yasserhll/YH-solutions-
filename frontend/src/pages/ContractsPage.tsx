@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { AlertTriangle, BadgeCheck, CalendarClock, FileSignature, LogOut, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { AlertTriangle, BadgeCheck, CalendarClock, FileSignature, IdCard, LogOut, Pencil, Plus, RefreshCw, Trash2, Truck } from 'lucide-react';
 import clsx from 'clsx';
 import { api, apiErrorMessage } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
@@ -19,6 +19,7 @@ import { KpiCard } from '../components/ui/KpiCard';
 import { SelectField, TextAreaField, TextField } from '../components/ui/Field';
 import { EmployeeSelect } from '../components/ui/EmployeeSelect';
 import { autoCdi, contractLabel } from '../utils/contracts';
+import { ContractDocumentsView } from './ContractDocumentsView';
 
 const fmt = (d: string | null) => (d ? new Date(d).toLocaleDateString('fr-FR') : '—');
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -129,7 +130,17 @@ type Action = { kind: 'renew' | 'cdi' | 'stc'; contract: Contract };
 
 export default function ContractsPage() {
   // ?state= lets the top-bar notification open the "À traiter" filter directly.
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Contrats / CIN / Permis switch at the top (?vue=cin|permis).
+  const vue = searchParams.get('vue') === 'cin' ? 'cin' : searchParams.get('vue') === 'permis' ? 'permis' : 'contrats';
+  const setVue = (v: 'contrats' | 'cin' | 'permis') =>
+    setSearchParams((p) => {
+      const next = new URLSearchParams(p);
+      if (v === 'contrats') next.delete('vue');
+      else next.set('vue', v);
+      next.delete('state');
+      return next;
+    });
   const [state, setState] = useState(searchParams.get('state') ?? '');
   const [rank, setRank] = useState(searchParams.get('rank') ?? '');
   const [search, setSearch] = useState('');
@@ -148,6 +159,7 @@ export default function ContractsPage() {
       api
         .get<Paginated<Contract>>('/contracts', { params: { ...siteParams, state: state || undefined, rank: rank || undefined, search: search || undefined, page } })
         .then((r) => r.data),
+    enabled: vue === 'contrats',
   });
 
   const summaryQuery = useQuery({
@@ -263,6 +275,50 @@ export default function ContractsPage() {
   ];
 
 
+  const viewSwitch = (
+    <div className="mb-4 inline-flex rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-800 dark:bg-slate-900">
+      {(
+        [
+          { key: 'contrats', label: 'Contrats', icon: FileSignature },
+          { key: 'cin', label: 'CIN', icon: IdCard },
+          { key: 'permis', label: 'Permis', icon: Truck },
+        ] as const
+      ).map((v) => (
+        <button
+          key={v.key}
+          type="button"
+          onClick={() => setVue(v.key)}
+          className={clsx(
+            'inline-flex items-center gap-2 rounded-lg px-4 py-1.5 text-sm font-medium transition-colors',
+            vue === v.key
+              ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+              : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
+          )}
+        >
+          <v.icon size={16} />
+          {v.label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (vue !== 'contrats') {
+    return (
+      <div>
+        <PageHeader
+          title={vue === 'cin' ? 'Contrats · CIN' : 'Contrats · Permis'}
+          description={
+            vue === 'cin'
+              ? "Date d'expiration de la CIN de chaque employé actif et jours restants"
+              : "Date d'expiration du permis des conducteurs de camion et jours restants"
+          }
+        />
+        {viewSwitch}
+        <ContractDocumentsView key={vue} doc={vue} />
+      </div>
+    );
+  }
+
   return (
     <div>
       <PageHeader
@@ -274,6 +330,7 @@ export default function ContractsPage() {
           </Button>
         }
       />
+      {viewSwitch}
 
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <button className="text-left" onClick={() => pick('en_cours')}>

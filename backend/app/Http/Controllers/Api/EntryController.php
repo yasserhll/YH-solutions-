@@ -44,6 +44,9 @@ class EntryController extends Controller
             'department_id' => ['nullable', 'exists:departments,id'],
             'establishment' => ['nullable', 'string', 'max:255'],
             'entry_date' => ['required', 'date'],
+            'cin_expiry_date' => ['nullable', 'date'],
+            'is_driver' => ['sometimes', 'boolean'],
+            'license_expiry_date' => ['nullable', 'date'],
         ]);
 
         $siteId = $this->resolveSiteId($request);
@@ -57,7 +60,7 @@ class EntryController extends Controller
                 'establishment' => $data['establishment'] ?? null,
                 'entry_date' => $data['entry_date'],
                 'status' => 'actif',
-            ]);
+            ] + $this->documentFields($data));
 
             Assignment::create([
                 'employee_id' => $employee->id,
@@ -104,10 +107,13 @@ class EntryController extends Controller
             'department_id' => ['nullable', 'exists:departments,id'],
             'establishment' => ['nullable', 'string', 'max:255'],
             'entry_date' => ['required', 'date'],
+            'cin_expiry_date' => ['nullable', 'date'],
+            'is_driver' => ['sometimes', 'boolean'],
+            'license_expiry_date' => ['nullable', 'date'],
         ]);
 
         $previousEntryDate = $entry->entry_date?->toDateString();
-        $entry->update($data);
+        $entry->update(array_diff_key($data, array_flip(['cin_expiry_date', 'is_driver', 'license_expiry_date'])));
 
         // A corrected entry date moves the first contract with it, as long
         // as nothing was decided on it yet.
@@ -129,7 +135,7 @@ class EntryController extends Controller
                 'department_id' => $data['department_id'] ?? null,
                 'establishment' => $data['establishment'] ?? null,
                 'entry_date' => $data['entry_date'],
-            ]);
+            ] + $this->documentFields($data));
         }
 
         AuditLogger::log('entry.updated', "Entrée modifiée — {$entry->full_name}", $entry->site_id, $entry);
@@ -170,5 +176,23 @@ class EntryController extends Controller
         AuditLogger::log('entry.deleted', "Entrée supprimée — {$fullName}", $entry->site_id, $entry);
 
         return response()->json(['message' => 'Entrée supprimée.']);
+    }
+
+    /**
+     * CIN / permis expiry dates live on the employee (followed in Contrats →
+     * CIN / Permis). Only the keys actually sent are written, and a
+     * non-driver never keeps a permis date.
+     */
+    private function documentFields(array $data): array
+    {
+        $fields = array_intersect_key($data, array_flip(['cin_expiry_date', 'is_driver', 'license_expiry_date']));
+        if (array_key_exists('is_driver', $fields)) {
+            $fields['driver_opt_out'] = ! $fields['is_driver'];
+            if (! $fields['is_driver']) {
+                $fields['license_expiry_date'] = null;
+            }
+        }
+
+        return $fields;
     }
 }

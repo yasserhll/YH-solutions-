@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard,
+  Siren,
   Clock,
   CalendarDays,
   ShieldAlert,
@@ -70,6 +71,7 @@ function navItemsFor(user: AuthUser | null): NavItem[] {
     { to: '/conges', label: 'Congés', icon: CalendarDays, module: 'conges' },
     { to: '/sanctions', label: 'Sanctions', icon: ShieldAlert, module: 'sanctions' },
     { to: '/hse/rapports', label: 'Rapports HSE', icon: HardHat, module: 'hse' },
+    { to: '/hse/suivi-atit', label: 'Suivi ATIT', icon: Siren, module: 'suivi_atit' },
     { to: '/mouvements', label: 'Entrées / Sorties', icon: ArrowLeftRight, module: 'mouvements' },
     { to: '/affectations', label: 'Affectations', icon: Briefcase, module: 'affectations' },
     { to: '/heures-supplementaires', label: 'Heures supplémentaires', icon: Timer, module: 'heures_sup' },

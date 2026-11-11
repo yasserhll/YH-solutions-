@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DepartmentController;
 use App\Http\Controllers\Api\DisciplinaryWarningController;
 use App\Http\Controllers\Api\EmployeeController;
+use App\Http\Controllers\Api\EmployeeDocumentController;
 use App\Http\Controllers\Api\EntryController;
 use App\Http\Controllers\Api\ExitController;
 use App\Http\Controllers\Api\FuelGlobalController;
@@ -19,6 +20,7 @@ use App\Http\Controllers\Api\FuelMovementController;
 use App\Http\Controllers\Api\FuelReportController;
 use App\Http\Controllers\Api\FuelVehicleController;
 use App\Http\Controllers\Api\HolidayController;
+use App\Http\Controllers\Api\HseAccidentController;
 use App\Http\Controllers\Api\HseReportController;
 use App\Http\Controllers\Api\HseUserController;
 use App\Http\Controllers\Api\IllnessController;
@@ -67,7 +69,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // EmployeeSelect (Congés/Sanctions/Mouvements/Affectations/Heures sup.
     // forms) searches employees — any session that picks an employee.
     Route::get('/employees', [EmployeeController::class, 'index'])
-        ->middleware('module:pointage,conges,sanctions,mouvements,contrats,affectations,heures_sup,personnel');
+        ->middleware('module:pointage,conges,sanctions,mouvements,contrats,affectations,heures_sup,personnel,suivi_atit');
 
     Route::get('/dashboard', [DashboardController::class, 'index'])->middleware('module:dashboard');
 
@@ -78,6 +80,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/hse-reports/{hseReport}/export-excel', [HseReportController::class, 'exportExcel']);
         // Managing animateur accounts: responsable_hse / SuperAdmin only (HseUserController::ensureManager).
         Route::apiResource('hse-users', HseUserController::class)->only(['index', 'store', 'update', 'destroy'])->parameters(['hse-users' => 'hseUser']);
+    });
+
+    // Suivi ATIT: accidents / incidents de travail (bilan, export, import of the company's workbook).
+    Route::middleware('module:suivi_atit')->group(function () {
+        Route::get('/hse-accidents/summary', [HseAccidentController::class, 'summary']);
+        Route::get('/hse-accidents/export', [HseAccidentController::class, 'export']);
+        Route::post('/hse-accidents/import', [HseAccidentController::class, 'import']);
+        Route::apiResource('hse-accidents', HseAccidentController::class)->only(['index', 'store', 'update', 'destroy'])->parameters(['hse-accidents' => 'hseAccident']);
     });
 
     Route::middleware('module:pointage')->group(function () {
@@ -108,6 +118,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Contrats: 3-month CDD signed at each entry, then renewed / CDI / sortie (STC).
     Route::middleware('module:contrats')->group(function () {
+        // Contrats → CIN / Permis: expiry dates of the employees' documents.
+        Route::get('/employee-documents', [EmployeeDocumentController::class, 'index']);
+        Route::get('/employee-documents/summary', [EmployeeDocumentController::class, 'summary']);
+        Route::put('/employee-documents/{employee}', [EmployeeDocumentController::class, 'update']);
         Route::get('/contracts/summary', [ContractController::class, 'summary']);
         Route::post('/contracts/{contract}/renew', [ContractController::class, 'renew']);
         Route::post('/contracts/{contract}/cdi', [ContractController::class, 'makeCdi']);

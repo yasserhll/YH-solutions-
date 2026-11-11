@@ -25,6 +25,9 @@ class StoreEmployeeRequest extends FormRequest
             'status' => ['sometimes', Rule::in(['actif', 'sorti'])],
             'phone' => ['nullable', 'string', 'max:50'],
             'notes' => ['nullable', 'string'],
+            'cin_expiry_date' => ['nullable', 'date'],
+            'is_driver' => ['sometimes', 'boolean'],
+            'license_expiry_date' => ['nullable', 'date'],
         ];
     }
 }

@@ -24,13 +24,36 @@ class Employee extends Model
         'status',
         'phone',
         'notes',
+        'cin_expiry_date',
+        'is_driver',
+        'license_expiry_date',
+        'driver_opt_out',
     ];
+
+    /**
+     * A CIN / permis date typed or corrected (or the person leaving) sends
+     * its device alert right after the response — no delay, like contracts.
+     */
+    protected static function booted(): void
+    {
+        static::saved(function (Employee $employee) {
+            if ($employee->wasChanged(['cin_expiry_date', 'license_expiry_date', 'status']) || $employee->wasRecentlyCreated) {
+                if ($employee->cin_expiry_date || $employee->license_expiry_date) {
+                    \App\Services\ContractAlerts::soon();
+                }
+            }
+        });
+    }
 
     protected function casts(): array
     {
         return [
             'entry_date' => 'date',
             'exit_date' => 'date',
+            'cin_expiry_date' => 'date:Y-m-d',
+            'is_driver' => 'boolean',
+            'license_expiry_date' => 'date:Y-m-d',
+            'driver_opt_out' => 'boolean',
         ];
     }
 

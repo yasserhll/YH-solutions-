@@ -36,7 +36,7 @@ class User extends Authenticatable
      * EnsureModuleAccess) and its own pages/sidebar entry on the frontend.
      */
     public const MODULES = [
-        'dashboard', 'contrats', 'pointage', 'conges', 'sanctions', 'hse', 'mouvements', 'affectations',
+        'dashboard', 'contrats', 'pointage', 'conges', 'sanctions', 'hse', 'suivi_atit', 'mouvements', 'affectations',
         'heures_sup', 'caisse', 'consommation', 'personnel', 'rapports', 'historique',
     ];
 
@@ -46,8 +46,8 @@ class User extends Authenticatable
      */
     public const ROLE_MODULES = [
         'responsable' => ['dashboard', 'pointage', 'conges', 'sanctions', 'mouvements', 'contrats', 'affectations', 'heures_sup', 'caisse', 'consommation', 'personnel', 'rapports', 'historique'],
-        'responsable_hse' => ['pointage', 'conges', 'sanctions', 'hse', 'mouvements', 'affectations'],
-        'hse' => ['hse'],
+        'responsable_hse' => ['pointage', 'conges', 'sanctions', 'hse', 'suivi_atit', 'mouvements', 'affectations'],
+        'hse' => ['hse', 'suivi_atit'],
     ];
 
     protected $hidden = [

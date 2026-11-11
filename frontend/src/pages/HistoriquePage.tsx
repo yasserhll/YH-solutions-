@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
 import {
   FileSignature,
+  Siren,
   History,
   Clock,
   HeartPulse,
@@ -46,6 +47,7 @@ const moduleMeta: Record<string, { label: string; icon: LucideIcon; tone: string
   cash_transaction: { label: 'Caisse', icon: Wallet, tone: 'text-teal-500 bg-teal-50 dark:bg-teal-500/10' },
   employee: { label: 'Personnel', icon: Users, tone: 'text-indigo-500 bg-indigo-50 dark:bg-indigo-500/10' },
   fuel: { label: 'Consommation', icon: Fuel, tone: 'text-orange-500 bg-orange-50 dark:bg-orange-500/10' },
+  atit: { label: 'Suivi ATIT', icon: Siren, tone: 'text-red-500 bg-red-50 dark:bg-red-500/10' },
 };
 
 function moduleOf(action: string) {
