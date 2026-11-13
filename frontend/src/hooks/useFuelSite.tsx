@@ -14,12 +14,32 @@ import type { FuelTank } from '../types';
  * actually has citernes. A single-site responsable gets no picker at all —
  * the server resolves their site.
  */
+const SHARED_SITE_KEY = 'fuel-site';
+function readSharedSite(): number | null {
+  try {
+    const v = Number(sessionStorage.getItem(SHARED_SITE_KEY));
+    return v > 0 ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 export function useFuelSite(label: string) {
   const siteParams = useSiteParams();
   const { sites, needsSiteSelect } = useSelectableSites();
-  const [pickedSite, setPickedSite] = useState<number | null>(siteParams.site_id ?? null);
+  // The site picked here is shared by Global, Rapport and Affectation matériel
+  // (same affectation data), so moving between them keeps the same site.
+  const [pickedSite, setPickedSiteState] = useState<number | null>(() => siteParams.site_id ?? readSharedSite());
+  const setPickedSite = (id: number) => {
+    setPickedSiteState(id);
+    try {
+      sessionStorage.setItem(SHARED_SITE_KEY, String(id));
+    } catch {
+      /* private mode */
+    }
+  };
   useEffect(() => {
-    if (siteParams.site_id) setPickedSite(siteParams.site_id);
+    if (siteParams.site_id) setPickedSiteState(siteParams.site_id);
   }, [siteParams.site_id]);
 
   const { data: allTanks, isError: tanksFailed } = useQuery({
