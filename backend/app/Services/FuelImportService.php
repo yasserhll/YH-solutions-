@@ -59,7 +59,16 @@ class FuelImportService
                 $previousCount = $tank->movements()->where('origin', 'import')->count();
                 $tank->movements()->where('origin', 'import')->delete();
 
-                $rows = array_map(fn ($row) => $row + ['fuel_tank_id' => $tank->id, 'site_id' => $siteId], $result['rows']);
+                // A bon typed by the pompiste (origin = 'bon') is never deleted
+                // by a re-import, and the Excel line carrying the same n° de bon
+                // is skipped so the refuel isn't counted twice.
+                $typedBons = $tank->movements()->where('origin', 'bon')->whereNotNull('bon_number')->pluck('bon_number')
+                    ->map(fn ($n) => FuelMovement::normalizeBon($n))->filter()->flip();
+                $source = $typedBons->isEmpty() ? $result['rows'] : array_values(array_filter(
+                    $result['rows'],
+                    fn ($row) => $row['type'] !== 'exit' || ! $typedBons->has((string) FuelMovement::normalizeBon($row['bon_number'] ?? null)),
+                ));
+                $rows = array_map(fn ($row) => $row + ['fuel_tank_id' => $tank->id, 'site_id' => $siteId], $source);
                 foreach (array_chunk($rows, 1000) as $chunk) {
                     DB::table('fuel_movements')->insert($chunk);
                 }
@@ -123,7 +132,7 @@ class FuelImportService
             $applied++;
         }
 
-        return $applied + $tank->movements()->where('origin', 'manual')->count();
+        return $applied + $tank->movements()->whereIn('origin', ['manual', 'bon'])->count();
     }
 
     /**
@@ -361,7 +370,7 @@ class FuelImportService
                 'serie_end' => isset($map['serie_end']) ? XlsxStreamReader::toNumber($cells[$map['serie_end']] ?? null) : null,
                 'source_row' => $rowNumber,
             ];
-            $empty = ['supplier' => null, 'vehicle_code' => null, 'odometer' => null];
+            $empty = ['supplier' => null, 'vehicle_code' => null, 'plate_label' => null, 'odometer' => null];
 
             if ($hasIn) {
                 $rows[] = ['type' => 'entry', 'quantity' => round($in, 2)] + $common + [
@@ -374,6 +383,7 @@ class FuelImportService
                 $code = isset($map['code']) ? FuelVehicle::normalizeCode($cells[$map['code']] ?? null) : null;
                 $rows[] = ['type' => 'exit', 'quantity' => round($out, 2)] + $common + [
                     'vehicle_code' => $code !== null ? mb_substr($code, 0, 60) : null,
+                    'plate_label' => isset($map['plate']) ? $this->text($cells[$map['plate']] ?? null, 60) : null,
                     'odometer' => isset($map['odometer']) ? XlsxStreamReader::toNumber($cells[$map['odometer']] ?? null) : null,
                 ] + $empty;
                 $stats['exits']++;
@@ -386,7 +396,7 @@ class FuelImportService
         }
 
         // Every row needs the same keys, in the same order, for a bulk insert.
-        $keys = ['type', 'quantity', 'date', 'time', 'bon_number', 'remark', 'serie_start', 'serie_end', 'source_row', 'supplier', 'vehicle_code', 'odometer'];
+        $keys = ['type', 'quantity', 'date', 'time', 'bon_number', 'remark', 'serie_start', 'serie_end', 'source_row', 'supplier', 'vehicle_code', 'plate_label', 'odometer'];
         $rows = array_map(fn ($row) => array_merge(array_fill_keys($keys, null), array_intersect_key($row, array_flip($keys))), $rows);
         $seen = [];
         foreach ($rows as &$row) {
@@ -430,6 +440,7 @@ class FuelImportService
                 str_contains($label, 'BON') => 'bon',
                 str_contains($label, 'HEURE') => 'time',
                 $label === 'CODE' => 'code',
+                in_array($label, ['IMMATRICULATION', 'MATRICULE', 'MATRICULATION'], true) => 'plate',
                 str_contains($label, 'KILOM') || str_contains($label, 'COMPTEUR') => 'odometer',
                 str_contains($label, 'REMARQUE') || str_contains($label, 'OBSERVATION') => 'remark',
                 str_contains($label, 'SERIE DEPART') || str_contains($label, 'SERIE DEBUT') => 'serie_start',

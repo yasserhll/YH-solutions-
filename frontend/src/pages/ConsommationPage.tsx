@@ -32,6 +32,7 @@ import {
   Repeat,
   ClipboardList,
   History,
+  ReceiptText,
 } from 'lucide-react';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { api, apiErrorMessage, downloadFile, uploadErrorMessage } from '../api/client';
@@ -620,6 +621,12 @@ function ConsumptionPill({ row }: { row: FuelGlobalRow }) {
 }
 
 function OriginBadge({ row }: { row: FuelGlobalRow }) {
+  if (row.origin === 'bon')
+    return (
+      <span title="Bon saisi par le pompiste (Bons carburant)" className="inline-flex items-center gap-0.5 rounded-full bg-orange-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-orange-600 dark:bg-orange-500/10 dark:text-orange-400">
+        <ReceiptText size={9} /> Bon
+      </span>
+    );
   if (row.origin === 'manual')
     return (
       <span title="Ajoutée à la main depuis le global" className="inline-flex items-center gap-0.5 rounded-full bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-sky-600 dark:bg-sky-500/10 dark:text-sky-400">

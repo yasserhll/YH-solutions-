@@ -432,7 +432,8 @@ function InlineInputInner({ initial, onSave, list, placeholder }: { initial: str
 
 // ---------------------------------------------------------------- affectation
 
-function AssignmentsView({ siteFilter, assignments }: { siteFilter: { site_id?: number }; assignments: FuelAssignment[] | undefined }) {
+/** Also the Affectation session's page (AffectationMaterielPage) — same data as this tab. */
+export function AssignmentsView({ siteFilter, assignments }: { siteFilter: { site_id?: number }; assignments: FuelAssignment[] | undefined }) {
   const queryClient = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState('');
@@ -512,8 +513,8 @@ function AssignmentsView({ siteFilter, assignments }: { siteFilter: { site_id?: 
                       <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:text-slate-500">
                         <th className="px-4 py-2.5 font-medium">Code</th>
                         {category === 'camion' && <th className="px-4 py-2.5 font-medium">Marque</th>}
-                        <th className="px-4 py-2.5 font-medium">Équipe 1</th>
-                        <th className="px-4 py-2.5 font-medium">Équipe 2</th>
+                        <th className="px-4 py-2.5 font-medium">1er shift</th>
+                        <th className="px-4 py-2.5 font-medium">2ème shift</th>
                         <th className="px-4 py-2.5 font-medium">Remplaçants</th>
                         <th className="px-4 py-2.5 font-medium">Activité par défaut</th>
                         <th className="px-4 py-2.5" />
@@ -524,6 +525,9 @@ function AssignmentsView({ siteFilter, assignments }: { siteFilter: { site_id?: 
                         <tr key={a.id} className="group hover:bg-slate-50 dark:hover:bg-slate-800/50">
                           <td className="px-4 py-2.5">
                             <span className="rounded-md bg-slate-900 px-2 py-0.5 font-mono text-xs font-bold text-white dark:bg-white dark:text-slate-900">{a.label ?? a.code}</span>
+                            {(a.matricule || a.vehicle_type) && (
+                              <div className="mt-1 whitespace-nowrap text-[11px] text-slate-400 dark:text-slate-500">{[a.matricule, a.vehicle_type].filter(Boolean).join(' · ')}</div>
+                            )}
                           </td>
                           {category === 'camion' && (
                             <td className="whitespace-nowrap px-4 py-2.5 text-xs">
@@ -631,8 +635,8 @@ function AssignmentFormModal({ assignment, siteFilter, onClose }: { assignment: 
               </SelectField>
             </div>
           )}
-          <TextField label="Équipe 1" value={form.driver_1} onChange={set('driver_1')} />
-          <TextField label="Équipe 2" value={form.driver_2} onChange={set('driver_2')} />
+          <TextField label="Conducteur 1er shift" value={form.driver_1} onChange={set('driver_1')} />
+          <TextField label="Conducteur 2ème shift" value={form.driver_2} onChange={set('driver_2')} />
           <TextField label="Remplaçants" value={form.replacements} onChange={set('replacements')} />
           <TextField label="Activité par défaut" value={form.activity} onChange={set('activity')} list="fuel-activity-defaults" placeholder="ex. STERILE" />
           <datalist id="fuel-activity-defaults">

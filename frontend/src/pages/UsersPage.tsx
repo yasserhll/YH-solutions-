@@ -25,6 +25,7 @@ const roleLabels: Record<Role, string> = {
   responsable: 'Responsable de site',
   hse: 'Animateur HSE',
   responsable_hse: 'Responsable HSE',
+  pompiste: 'Pompiste',
 };
 import { PageHeader } from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Button';
@@ -206,6 +207,7 @@ function UserFormModal({ user, onClose }: { user: User | null; onClose: () => vo
           <option value="responsable">Responsable de site</option>
           <option value="hse">Animateur HSE</option>
           <option value="responsable_hse">Responsable HSE</option>
+          <option value="pompiste">Pompiste</option>
           <option value="superadmin">SuperAdmin</option>
         </SelectField>
         {form.role !== 'superadmin' && (

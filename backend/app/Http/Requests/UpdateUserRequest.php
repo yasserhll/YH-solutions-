@@ -25,7 +25,7 @@ class UpdateUserRequest extends FormRequest
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email,'.$userId],
             'password' => ['nullable', 'string', 'min:8'],
-            'role' => ['required', Rule::in(['superadmin', 'responsable', 'hse', 'responsable_hse'])],
+            'role' => ['required', Rule::in(['superadmin', 'responsable', 'hse', 'responsable_hse', 'pompiste'])],
             'site_ids' => $isSuperAdmin ? ['sometimes', 'array'] : ['required', 'array', 'min:1'],
             'site_ids.*' => ['integer', 'exists:sites,id'],
             'is_active' => ['sometimes', 'boolean'],

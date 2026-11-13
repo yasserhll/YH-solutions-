@@ -104,12 +104,18 @@ class FuelReportController extends Controller
     {
         $siteId = $this->singleSiteId($request);
         $defaultBrand = Site::findOrFail($siteId)->defaultTruckBrand();
-        // The marque lives on the vehicle (Matriculation), shared with this screen.
-        $brands = FuelVehicle::whereNotNull('brand')->pluck('brand', 'code');
+        $rows = FuelAssignment::where('site_id', $siteId)->orderBy('category')->orderBy('sort_order')->orderBy('code')->get();
+        // The marque / plate live on the vehicle (Matériel / Matriculation), shared with this screen.
+        $vehicles = FuelVehicle::whereIn('code', $rows->pluck('code'))->get(['code', 'matricule', 'brand', 'type'])->keyBy('code');
 
         return response()->json(
-            FuelAssignment::where('site_id', $siteId)->orderBy('category')->orderBy('sort_order')->orderBy('code')->get()
-                ->map(fn (FuelAssignment $a) => [...$a->toArray(), 'brand' => $brands[$a->code] ?? null, 'default_brand' => $defaultBrand])
+            $rows->map(fn (FuelAssignment $a) => [
+                ...$a->toArray(),
+                'brand' => $vehicles[$a->code]->brand ?? null,
+                'matricule' => $vehicles[$a->code]->matricule ?? null,
+                'vehicle_type' => $vehicles[$a->code]->type ?? null,
+                'default_brand' => $defaultBrand,
+            ])
         );
     }
 

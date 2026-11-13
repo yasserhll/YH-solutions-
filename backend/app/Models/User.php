@@ -37,7 +37,7 @@ class User extends Authenticatable
      */
     public const MODULES = [
         'dashboard', 'contrats', 'pointage', 'conges', 'sanctions', 'hse', 'suivi_atit', 'mouvements', 'affectations',
-        'heures_sup', 'caisse', 'consommation', 'personnel', 'rapports', 'historique',
+        'heures_sup', 'caisse', 'consommation', 'bons', 'materiel', 'affectation_materiel', 'personnel', 'rapports', 'historique',
     ];
 
     /**
@@ -45,9 +45,12 @@ class User extends Authenticatable
      * — exactly the access every role had before per-account sessions existed.
      */
     public const ROLE_MODULES = [
-        'responsable' => ['dashboard', 'pointage', 'conges', 'sanctions', 'mouvements', 'contrats', 'affectations', 'heures_sup', 'caisse', 'consommation', 'personnel', 'rapports', 'historique'],
+        'responsable' => ['dashboard', 'pointage', 'conges', 'sanctions', 'mouvements', 'contrats', 'affectations', 'heures_sup', 'caisse', 'consommation', 'bons', 'materiel', 'affectation_materiel', 'personnel', 'rapports', 'historique'],
         'responsable_hse' => ['pointage', 'conges', 'sanctions', 'hse', 'suivi_atit', 'mouvements', 'affectations'],
         'hse' => ['hse', 'suivi_atit'],
+        // A pompiste types the bons carburant of its site's citernes and works on its
+        // vehicles: Bons carburant + Matériel + Affectation (1er / 2ème shift).
+        'pompiste' => ['bons', 'materiel', 'affectation_materiel'],
     ];
 
     protected $hidden = [

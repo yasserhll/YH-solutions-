@@ -55,7 +55,7 @@ class FuelMovementController extends Controller
         $old = $fuelMovement->only(array_keys($data));
 
         DB::transaction(function () use ($request, $fuelMovement, $data) {
-            if ($fuelMovement->origin === 'manual') {
+            if ($fuelMovement->origin !== 'import') {
                 // A hand-added row can also move to another citerne of the same site.
                 $tank = FuelTank::findOrFail($request->input('fuel_tank_id', $fuelMovement->fuel_tank_id));
                 abort_if($tank->site_id !== $fuelMovement->site_id, 422, 'La citerne doit appartenir au même site.');

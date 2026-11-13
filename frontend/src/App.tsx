@@ -9,6 +9,7 @@ import { DashboardLayout } from './layouts/DashboardLayout';
 import { hasModule, homePath } from './utils/modules';
 import type { ModuleKey } from './types';
 import LoginPage from './pages/LoginPage';
+import BonsPage from './pages/BonsPage';
 import DashboardPage from './pages/DashboardPage';
 import PersonnelPage from './pages/PersonnelPage';
 import EmployeeDetailPage from './pages/EmployeeDetailPage';
@@ -29,6 +30,9 @@ import HseReportsPage from './pages/HseReportsPage';
 import HseDashboardPage from './pages/HseDashboardPage';
 import HseUsersPage from './pages/HseUsersPage';
 import HseAccidentsPage from './pages/HseAccidentsPage';
+import MaterielPage from './pages/MaterielPage';
+import AffectationMaterielPage from './pages/AffectationMaterielPage';
+import DetailCiternesPage from './pages/DetailCiternesPage';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 10_000 } },
@@ -57,9 +61,9 @@ function RequireSuperAdmin({ children }: { children: React.ReactNode }) {
  * its own home page instead of a blank/403'd screen. UX only: the backend's
  * `module:<key>` middleware is what actually refuses the data.
  */
-function RequireModule({ module, children }: { module: ModuleKey; children: React.ReactNode }) {
+function RequireModule({ module, children }: { module: ModuleKey | ModuleKey[]; children: React.ReactNode }) {
   const { user } = useAuth();
-  if (!hasModule(user, module)) {
+  if (!(Array.isArray(module) ? module : [module]).some((m) => hasModule(user, m))) {
     const home = homePath(user);
     return home ? <Navigate to={home} replace /> : <NoModules />;
   }
@@ -224,6 +228,38 @@ export default function App() {
                     element={
                       <RequireModule module="hse">
                         <HseReportsPage />
+                      </RequireModule>
+                    }
+                  />
+                  <Route
+                    path="/bons"
+                    element={
+                      <RequireModule module="bons">
+                        <BonsPage />
+                      </RequireModule>
+                    }
+                  />
+                  <Route
+                    path="/detail-citernes"
+                    element={
+                      <RequireModule module={['consommation', 'bons']}>
+                        <DetailCiternesPage />
+                      </RequireModule>
+                    }
+                  />
+                  <Route
+                    path="/materiel"
+                    element={
+                      <RequireModule module="materiel">
+                        <MaterielPage />
+                      </RequireModule>
+                    }
+                  />
+                  <Route
+                    path="/affectation-materiel"
+                    element={
+                      <RequireModule module="affectation_materiel">
+                        <AffectationMaterielPage />
                       </RequireModule>
                     }
                   />

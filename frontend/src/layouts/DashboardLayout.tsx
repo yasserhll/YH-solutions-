@@ -4,6 +4,10 @@ import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard,
   Siren,
+  Truck,
+  ReceiptText,
+  Sheet,
+  ClipboardList,
   Clock,
   CalendarDays,
   ShieldAlert,
@@ -77,6 +81,11 @@ function navItemsFor(user: AuthUser | null): NavItem[] {
     { to: '/heures-supplementaires', label: 'Heures supplémentaires', icon: Timer, module: 'heures_sup' },
     { to: '/caisse', label: 'Caisse', icon: Wallet, module: 'caisse' },
     { to: '/consommation', label: 'Consommation', icon: Fuel, module: 'consommation' },
+    { to: '/bons', label: 'Bons carburant', icon: ReceiptText, module: 'bons' },
+    // Détail citernes: open to the Consommation and the Bons carburant sessions alike.
+    { to: '/detail-citernes', label: 'Détail citernes', icon: Sheet, show: hasModule(user, 'consommation') || hasModule(user, 'bons') },
+    { to: '/materiel', label: 'Matériel', icon: Truck, module: 'materiel' },
+    { to: '/affectation-materiel', label: 'Affectation matériel', icon: ClipboardList, module: 'affectation_materiel' },
     { to: '/personnel', label: 'Personnel', icon: Users, module: 'personnel' },
     // An hse account files reports, it doesn't manage other accounts.
     { to: '/hse/utilisateurs', label: 'Comptes animateurs', icon: UserCog, module: 'hse', show: user?.role === 'responsable_hse' },
@@ -107,6 +116,7 @@ const roleLabels: Record<string, string> = {
   responsable: 'Responsable de site',
   hse: 'Animateur HSE',
   responsable_hse: 'Responsable HSE',
+  pompiste: 'Pompiste',
 };
 
 export function DashboardLayout() {

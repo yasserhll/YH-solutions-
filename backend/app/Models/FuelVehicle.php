@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * "Matriculation": maps the short code keyed in at the pump (E81, D240,
@@ -11,10 +12,39 @@ use Illuminate\Database\Eloquent\Model;
  */
 class FuelVehicle extends Model
 {
-    protected $fillable = ['code', 'matricule', 'type', 'brand', 'unit'];
+    protected $fillable = ['code', 'fleet_code', 'matricule', 'type', 'brand', 'unit', 'site_id', 'chassis_number', 'status', 'notes', 'sort_order'];
+
+    protected $attributes = ['status' => 'en_service'];
+
+    /** Matériel session: where the vehicle works and what state it is in. */
+    public const STATUSES = ['en_service' => 'En service', 'en_panne' => 'En panne', 'deplacement' => 'En déplacement', 'hors_service' => 'Hors service'];
+
+    public function site(): BelongsTo
+    {
+        return $this->belongsTo(Site::class);
+    }
 
     /** Counter unit of each camion make: Sinotruk is hour-metered like the engins, MAN / Renault run on km. */
     public const BRAND_UNITS = ['sinotruk' => 'h', 'man' => 'km', 'renault' => 'km'];
+
+    /**
+     * The code keyed at the pump for a Matériel "code parc": the D… / E…
+     * number when there is one ("D66 ARR" → D66, "Niveleuse-E76" → E76),
+     * else the digits of a plate ("75356A55" → 75356, how the light vehicles
+     * are keyed), else the code parc itself. Matériel shows `fleet_code`;
+     * Consommation matches on `code`.
+     */
+    public static function pumpCodeFor(string $fleetCode, ?string $plate): string
+    {
+        if ($code = FuelAssignment::codeFromLabel($fleetCode)) {
+            return $code;
+        }
+        if ($plate && preg_match('/^(\d{3,6})-?[A-Z]/', $plate, $m)) {
+            return $m[1];
+        }
+
+        return (string) self::normalizeCode($fleetCode);
+    }
 
     /**
      * Same normalization for every code, whether it comes from an import or

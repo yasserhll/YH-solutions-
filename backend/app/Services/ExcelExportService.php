@@ -503,6 +503,115 @@ class ExcelExportService
     }
 
     /**
+     * Détail citernes: a replica of one citerne sheet of the company's stock
+     * workbooks ("citerne louta 3.xlsx"): rows 1-4 empty, a group row 5
+     * (ENTREE B:C, SORTIES D:J, SERIE DEPART K5:K6, SERIE FIN L5:L6 merged),
+     * the column row 6, data from row 7. Fonts, fills (DBE9F7 / D9F2D0),
+     * navy 1F3864 header text, widths, formats, frozen panes, autofilter and
+     * no gridlines are copied from the original. Like the original, SERIE
+     * DEPART chains on the line above (=+L6) and SERIE FIN = +K+I as live
+     * formulas; a line whose stored série départ does not follow the line
+     * above (pump index reset, a jump) keeps its own value.
+     *
+     * @param  array<int, array<string, mixed>>  $lines  FuelTankDetailController::mergeLines()
+     */
+    public function streamTankSheet(string $filename, string $tankName, array $lines): StreamedResponse
+    {
+        $spreadsheet = new Spreadsheet();
+        $spreadsheet->getDefaultStyle()->getFont()->setName('Aptos Narrow')->setSize(11);
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle(mb_substr(str_replace(['[', ']', ':', '*', '?', '/', '\\'], ' ', $tankName), 0, 31) ?: 'Citerne');
+        $sheet->setShowGridlines(false);
+
+        $sheet->setCellValue('B5', 'ENTREE')->setCellValue('D5', 'SORTIES')
+            ->setCellValue('K5', 'SERIE DEPART')->setCellValue('L5', 'SERIE FIN');
+        $sheet->fromArray(['Date', 'Qte', 'Fournisseur', 'N° DE BON', 'Heure', 'Code', 'Immatriculation', 'Kilometrage', 'Qte', 'Remarque'], null, 'A6');
+        foreach (['B5:C5', 'D5:J5', 'K5:K6', 'L5:L6'] as $range) {
+            $sheet->mergeCells($range);
+        }
+
+        $number = fn ($v) => is_string($v) && preg_match('/^\d{1,15}$/', $v) ? (int) $v : $v;
+        $data = [];
+        $row = 7;
+        $previousEnd = null;
+        foreach ($lines as $l) {
+            $start = $l['serie_start'];
+            if ($previousEnd !== null && ($start === null || abs($start - $previousEnd) < 0.01)) {
+                $k = '=+L'.($row - 1);
+                $start = $previousEnd;
+            } else {
+                $k = $start;
+            }
+            $previousEnd = $start === null ? null : $start + (float) ($l['exit_qty'] ?? 0);
+
+            $data[] = [
+                $l['date'] ? \PhpOffice\PhpSpreadsheet\Shared\Date::stringToExcel($l['date']) : null,
+                $l['entry_qty'],
+                $l['supplier'],
+                $number($l['bon_number']),
+                $l['time'] ? $this->timeFraction($l['time']) : null,
+                $number($l['code']),
+                $l['code'] !== null ? ($l['matricule'] ?? '') : null,
+                $l['odometer'],
+                $l['exit_qty'],
+                $l['remark'],
+                $k,
+                $start === null ? null : "=+K{$row}+I{$row}",
+            ];
+            $row++;
+        }
+        if ($data) {
+            $sheet->fromArray($data, null, 'A7', true);
+        }
+        $last = max($row - 1, 7);
+
+        $thin = ['borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]];
+        $navy = ['name' => 'Century Gothic', 'size' => 10, 'bold' => true, 'color' => ['argb' => 'FF1F3864']];
+        $center = ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER, 'wrapText' => true];
+        $blue = ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFDBE9F7']];
+        $green = ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFD9F2D0']];
+
+        $sheet->getStyle('B5:L5')->applyFromArray($thin);
+        $sheet->getStyle('A6:L6')->applyFromArray($thin);
+        foreach (['B5', 'D5', 'K5', 'L5', 'A6'] as $cell) {
+            $sheet->getStyle($cell)->applyFromArray(['font' => $navy, 'fill' => $blue, 'alignment' => $center]);
+        }
+        $sheet->getStyle('B6:J6')->applyFromArray(['font' => $navy, 'fill' => $green, 'alignment' => $center]);
+        $sheet->getStyle('E6')->getNumberFormat()->setFormatCode('h:mm:ss');
+
+        $gothic = ['name' => 'Century Gothic', 'size' => 11, 'color' => ['argb' => 'FF3A3838']];
+        $sheet->getStyle("A7:L{$last}")->applyFromArray($thin + [
+            'font' => ['name' => 'Calibri', 'size' => 11],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_BOTTOM, 'wrapText' => true],
+        ]);
+        $sheet->getStyle("B7:C{$last}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_GENERAL);
+        $sheet->getStyle("A7:A{$last}")->applyFromArray(['font' => $gothic])->getNumberFormat()->setFormatCode('d/m/yyyy');
+        $sheet->getStyle("E7:E{$last}")->getNumberFormat()->setFormatCode('h:mm:ss');
+        $sheet->getStyle("G7:G{$last}")->applyFromArray(['font' => $gothic]);
+        $sheet->getStyle("K7:L{$last}")->applyFromArray(['font' => $gothic, 'alignment' => ['vertical' => Alignment::VERTICAL_CENTER]])
+            ->getNumberFormat()->setFormatCode('0');
+
+        foreach (['A' => 16.44, 'B' => 7.11, 'C' => 10.89, 'D' => 12.0, 'E' => 10.66, 'F' => 18.89, 'G' => 31.22, 'H' => 15.44,
+            'I' => 10.66, 'J' => 33.11, 'K' => 12.78, 'L' => 11.11] as $column => $width) {
+            $sheet->getColumnDimension($column)->setWidth($width);
+        }
+        $sheet->getDefaultRowDimension()->setRowHeight(14.25);
+        $sheet->setAutoFilter("A6:J{$last}");
+        $sheet->freezePane('A7');
+
+        $writer = new Xlsx($spreadsheet);
+        $writer->setPreCalculateFormulas(false);
+
+        return new StreamedResponse(function () use ($writer) {
+            $writer->save('php://output');
+        }, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, private',
+        ]);
+    }
+
+    /**
      * Consommation > Rapport: a replica of the company's own "RAPPORT GSL
      * MM-YYYY.xlsx" — one sheet per day ("27-08"), title bar "CONSOMMATION
      * JOURNALIERE DE GASOIL dd/mm/yyyy - SITE", a CAMIONS block (CHAUFFEURS

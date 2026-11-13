@@ -150,7 +150,8 @@ class XlsxStreamReader
 
             return sprintf('%02d:%02d:%02d', intdiv($seconds, 3600), intdiv($seconds % 3600, 60), $seconds % 60);
         }
-        if (is_string($value) && preg_match('/^(\d{1,2})[:hH](\d{2})(?::(\d{2}))?$/', trim($value), $m) && (int) $m[1] < 24) {
+        // "13:59", "13h59", and the typos "13:59;00" / "13;30:00" seen in the citerne sheets.
+        if (is_string($value) && preg_match('/^(\d{1,2})[:;hH](\d{2})(?:[:;](\d{2}))?$/', trim($value), $m) && (int) $m[1] < 24) {
             return sprintf('%02d:%02d:%02d', $m[1], $m[2], $m[3] ?? 0);
         }
 

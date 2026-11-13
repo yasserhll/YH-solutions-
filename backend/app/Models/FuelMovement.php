@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * One line of a citerne sheet — an ENTREE (delivery into the tank) or a
@@ -52,6 +53,7 @@ class FuelMovement extends Model
             'serie_start' => 'float',
             'serie_end' => 'float',
             'edited' => 'boolean',
+            'created_at' => 'datetime',
         ];
     }
 
@@ -63,5 +65,28 @@ class FuelMovement extends Model
     public function site(): BelongsTo
     {
         return $this->belongsTo(Site::class);
+    }
+
+    /** Proofs of a bon carburant typed by a pompiste (origin = 'bon'). */
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(FuelBonAttachment::class);
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /** "0075951" and "75951" are the same paper bon. */
+    public static function normalizeBon(?string $number): ?string
+    {
+        $number = strtoupper(preg_replace('/\s+/', '', (string) $number));
+        if ($number === '') {
+            return null;
+        }
+        $trimmed = ltrim($number, '0');
+
+        return $trimmed === '' ? '0' : $trimmed;
     }
 }

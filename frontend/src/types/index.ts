@@ -5,7 +5,7 @@
  * sees the HSE module. `hse` files the daily report; `responsable_hse`
  * reviews/controls every report on their assigned site(s).
  */
-export type Role = 'superadmin' | 'responsable' | 'hse' | 'responsable_hse';
+export type Role = 'superadmin' | 'responsable' | 'hse' | 'responsable_hse' | 'pompiste';
 
 export interface Site {
   id: number;
@@ -43,6 +43,9 @@ export type ModuleKey =
   | 'heures_sup'
   | 'caisse'
   | 'consommation'
+  | 'bons'
+  | 'materiel'
+  | 'affectation_materiel'
   | 'personnel'
   | 'rapports'
   | 'historique';
@@ -620,6 +623,29 @@ export interface FuelAssignment {
   /** The camion's marque, stored on the vehicle (shared with Matriculation); null = the site's default. */
   brand: FuelBrand | null;
   default_brand: FuelBrand;
+  /** From the vehicle (Matériel / Matriculation). */
+  matricule?: string | null;
+  vehicle_type?: string | null;
+}
+
+export type EquipmentStatus = 'en_service' | 'en_panne' | 'deplacement' | 'hors_service';
+
+/** Matériel session: one vehicle of a site (same row as Matriculation's FuelVehicle). */
+export interface Equipment extends FuelVehicle {
+  /** "CODE PARC" exactly as in the company's file ("D66 ARR", "TRSP"…); `code` is the pump code (Consommation). */
+  fleet_code: string | null;
+  sort_order: number | null;
+  site_id: number | null;
+  site: { id: number; name: string } | null;
+  chassis_number: string | null;
+  status: EquipmentStatus;
+  notes: string | null;
+}
+
+export interface EquipmentPage extends Paginated<Equipment> {
+  counts: Record<EquipmentStatus, number>;
+  types: string[];
+  statuses: Record<EquipmentStatus, string>;
 }
 
 export interface FuelReportRefuel {
@@ -749,7 +775,7 @@ export interface FuelGlobalRow {
   bon_number: string | null;
   fuel_tank_id: number;
   /** 'manual' = added by hand from the Global; an imported row edited by hand has edited = true. */
-  origin: 'import' | 'manual';
+  origin: 'import' | 'manual' | 'bon';
   edited: boolean;
   is_transfer: boolean;
   tank: string;
@@ -812,4 +838,71 @@ export interface ContractSummary {
   termine: number;
   cdi: number;
   alert_days: number;
+}
+
+/** A citerne in the "Bons carburant" session, with the pump index the next bon starts from. */
+export interface BonTank {
+  id: number;
+  name: string;
+  site: { id: number; name: string };
+  last_serie: number | null;
+  bons: number;
+  today_count: number;
+  today_litres: number;
+  last_date: string | null;
+}
+
+/** A SORTIE line of a citerne: a bon typed by the pompiste (origin 'bon') or a line of the Excel file. */
+export interface FuelBon {
+  id: number;
+  fuel_tank_id: number;
+  site_id: number;
+  date: string;
+  time: string | null;
+  bon_number: string | null;
+  company: string | null;
+  vehicle_code: string | null;
+  fleet_code: string | null;
+  matricule: string | null;
+  vehicle_type: string | null;
+  odometer: number | null;
+  quantity: number;
+  serie_start: number | null;
+  serie_end: number | null;
+  driver_name: string | null;
+  driver_cin: string | null;
+  pompiste_name: string | null;
+  remark: string | null;
+  origin: 'import' | 'manual' | 'bon';
+  created_by: number | null;
+  creator_name: string | null;
+  created_at: string | null;
+  attachments_count: number;
+}
+
+export interface FuelBonPage extends Paginated<FuelBon> {
+  totals: { count: number; litres: number };
+  last_serie: number | null;
+}
+
+export interface BonVehicle {
+  id: number;
+  code: string;
+  fleet_code: string | null;
+  matricule: string | null;
+  type: string | null;
+  status: EquipmentStatus;
+  site_id: number | null;
+  site_name: string | null;
+  driver_1: string | null;
+  driver_2: string | null;
+}
+
+export interface BonAttachment {
+  id: number;
+  fuel_movement_id: number;
+  original_name: string;
+  mime: string;
+  size: number;
+  created_at: string;
 }

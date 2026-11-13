@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
 import {
+  ReceiptText,
   FileSignature,
   Siren,
+  Truck,
   History,
   Clock,
   HeartPulse,
@@ -48,6 +50,8 @@ const moduleMeta: Record<string, { label: string; icon: LucideIcon; tone: string
   employee: { label: 'Personnel', icon: Users, tone: 'text-indigo-500 bg-indigo-50 dark:bg-indigo-500/10' },
   fuel: { label: 'Consommation', icon: Fuel, tone: 'text-orange-500 bg-orange-50 dark:bg-orange-500/10' },
   atit: { label: 'Suivi ATIT', icon: Siren, tone: 'text-red-500 bg-red-50 dark:bg-red-500/10' },
+  bon: { label: 'Bons carburant', icon: ReceiptText, tone: 'text-orange-500 bg-orange-50 dark:bg-orange-500/10' },
+  materiel: { label: 'Matériel', icon: Truck, tone: 'text-blue-500 bg-blue-50 dark:bg-blue-500/10' },
 };
 
 function moduleOf(action: string) {

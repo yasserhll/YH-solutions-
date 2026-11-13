@@ -3,6 +3,8 @@
 use App\Http\Controllers\Api\AssignmentController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\AuditLogController;
+use App\Http\Controllers\Api\FuelBonController;
+use App\Http\Controllers\Api\FuelTankDetailController;
 use App\Http\Controllers\Api\ContractController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CashAccountController;
@@ -13,6 +15,7 @@ use App\Http\Controllers\Api\DisciplinaryWarningController;
 use App\Http\Controllers\Api\EmployeeController;
 use App\Http\Controllers\Api\EmployeeDocumentController;
 use App\Http\Controllers\Api\EntryController;
+use App\Http\Controllers\Api\EquipmentController;
 use App\Http\Controllers\Api\ExitController;
 use App\Http\Controllers\Api\FuelGlobalController;
 use App\Http\Controllers\Api\FuelTankController;
@@ -178,6 +181,43 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/audit-logs', [AuditLogController::class, 'index'])->middleware('module:historique');
 
+    // Bons carburant: the pompiste types each paper bon (with photos) on its citerne.
+    Route::middleware('module:bons')->group(function () {
+        Route::get('/bons/tanks', [FuelBonController::class, 'tanks']);
+        Route::get('/bons/vehicles', [FuelBonController::class, 'vehicles']);
+        Route::get('/bons/last-refuel', [FuelBonController::class, 'lastRefuel']);
+        Route::get('/bons', [FuelBonController::class, 'index']);
+        Route::post('/bons', [FuelBonController::class, 'store']);
+        Route::post('/bons/{fuelMovement}', [FuelBonController::class, 'update']);
+        Route::delete('/bons/{fuelMovement}', [FuelBonController::class, 'destroy']);
+        Route::get('/bons/{fuelMovement}/attachments', [FuelBonController::class, 'attachments']);
+        Route::get('/bons/{fuelMovement}/attachments/{attachment}', [FuelBonController::class, 'attachment']);
+        Route::delete('/bons/{fuelMovement}/attachments/{attachment}', [FuelBonController::class, 'destroyAttachment']);
+    });
+
+    // Détail citernes: each citerne line by line like its Excel sheet, + its replica export.
+    Route::middleware('module:consommation,bons')->group(function () {
+        Route::get('/citernes/detail/tanks', [FuelTankDetailController::class, 'tanks']);
+        Route::get('/citernes/detail', [FuelTankDetailController::class, 'index']);
+        Route::get('/citernes/detail/export', [FuelTankDetailController::class, 'export']);
+    });
+
+    // Matériel session: each site's vehicles (QR code per vehicle), same table as Matriculation.
+    Route::middleware('module:materiel')->group(function () {
+        Route::post('/materiel/import', [EquipmentController::class, 'import']);
+        Route::apiResource('materiel', EquipmentController::class)->only(['index', 'store', 'update', 'destroy'])->parameters(['materiel' => 'fuelVehicle']);
+    });
+
+    // "Affectation" (camion / engin → 1er / 2ème shift) is shared by the
+    // Affectation session and Consommation → Rapport (its drivers).
+    Route::middleware('module:consommation,affectation_materiel')->group(function () {
+        Route::get('/fuel/assignments', [FuelReportController::class, 'assignments']);
+        Route::post('/fuel/assignments', [FuelReportController::class, 'storeAssignment']);
+        Route::post('/fuel/assignments/import', [FuelReportController::class, 'importAssignments']);
+        Route::put('/fuel/assignments/{fuelAssignment}', [FuelReportController::class, 'updateAssignment']);
+        Route::delete('/fuel/assignments/{fuelAssignment}', [FuelReportController::class, 'destroyAssignment']);
+    });
+
     // Consommation (fuel): Matriculation (company-wide lookup), Citernes
     // (Excel imports, site-scoped) and the automatically-built Global view.
     Route::middleware('module:consommation')->group(function () {
@@ -193,11 +233,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/fuel/report', [FuelReportController::class, 'show']);
         Route::put('/fuel/report/lines', [FuelReportController::class, 'saveLine']);
         Route::get('/fuel/report/export', [FuelReportController::class, 'export']);
-        Route::get('/fuel/assignments', [FuelReportController::class, 'assignments']);
-        Route::post('/fuel/assignments', [FuelReportController::class, 'storeAssignment']);
-        Route::post('/fuel/assignments/import', [FuelReportController::class, 'importAssignments']);
-        Route::put('/fuel/assignments/{fuelAssignment}', [FuelReportController::class, 'updateAssignment']);
-        Route::delete('/fuel/assignments/{fuelAssignment}', [FuelReportController::class, 'destroyAssignment']);
         Route::post('/fuel/vehicles/import', [FuelVehicleController::class, 'import']);
         Route::apiResource('fuel/vehicles', FuelVehicleController::class)->only(['index', 'store', 'update', 'destroy'])->parameters(['vehicles' => 'fuelVehicle']);
     });
