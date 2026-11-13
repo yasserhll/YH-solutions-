@@ -58,6 +58,7 @@ class FuelBonController extends Controller
             'name' => $tank->name,
             'site' => $tank->site,
             'last_serie' => $this->lastSerie($tank->id),
+            ...$this->nextBon($tank->id),
             'bons' => (int) ($stats[$tank->id]->bons ?? 0),
             'today_count' => (int) ($stats[$tank->id]->today_count ?? 0),
             'today_litres' => round((float) ($stats[$tank->id]->today_litres ?? 0), 2),
@@ -152,7 +153,7 @@ class FuelBonController extends Controller
     {
         $tank = $this->tank($request, $request->input('fuel_tank_id'));
         $data = $this->validated($request, $tank);
-        $this->ensureNewBon($tank, $data['bon_number']);
+        $this->ensureNewBon($tank, $data['bon_number'], $data['date']);
         $request->validate(
             ['attachments' => ['required', 'array', 'min:1']],
             ['attachments.required' => 'Ajoutez au moins une photo du bon comme preuve.', 'attachments.min' => 'Ajoutez au moins une photo du bon comme preuve.'],
@@ -185,7 +186,7 @@ class FuelBonController extends Controller
         $this->ensureCanEdit($request, $fuelMovement);
         $tank = $fuelMovement->tank;
         $data = $this->validated($request, $tank);
-        $this->ensureNewBon($tank, $data['bon_number'], $fuelMovement->id);
+        $this->ensureNewBon($tank, $data['bon_number'], $data['date'], $fuelMovement->id);
         $old = $fuelMovement->only(array_keys($data));
 
         DB::transaction(function () use ($request, $fuelMovement, $data) {
@@ -263,12 +264,57 @@ class FuelBonController extends Controller
     }
 
     /** The same paper bon can't be typed twice on one citerne (nor re-typed over an imported line). */
-    protected function ensureNewBon(FuelTank $tank, string $number, ?int $exceptId = null): void
+    /**
+     * The n° the next bon most likely carries: the paper bons are numbered in
+     * sequence, so it is the highest n° among the citerne's latest sorties
+     * + 1, written like them (leading zeros kept: 0075951 → 0075952), and
+     * never one already used on the citerne in the last BON_WINDOW_DAYS (carnets are reused). Only a suggestion: the
+     * pompiste can type another n° (a new carnet, a skipped bon).
+     *
+     * @return array{last_bon: ?string, next_bon: ?string}
+     */
+    protected function nextBon(int $tankId): array
+    {
+        $recent = DB::table('fuel_movements')
+            ->where('fuel_tank_id', $tankId)->where('type', 'exit')->whereNotNull('bon_number')
+            ->orderByDesc('date')->orderByDesc('serie_end')->orderByDesc('id')
+            ->limit(30)->pluck('bon_number')
+            ->map(fn ($n) => trim((string) $n))
+            ->filter(fn ($n) => preg_match('/^\d{1,15}$/', $n));
+        if ($recent->isEmpty()) {
+            return ['last_bon' => null, 'next_bon' => null];
+        }
+
+        $last = $recent->sortByDesc(fn ($n) => (int) $n)->first();
+        $width = strlen($last);
+        $used = DB::table('fuel_movements')
+            ->where('fuel_tank_id', $tankId)->where('type', 'exit')->whereNotNull('bon_number')
+            ->where('date', '>=', now()->subDays(self::BON_WINDOW_DAYS)->toDateString())
+            ->whereRaw("TRIM(LEADING '0' FROM REPLACE(bon_number, ' ', '')) BETWEEN ? AND ?", [(string) ((int) $last + 1), (string) ((int) $last + 50)])
+            ->pluck('bon_number')->map(fn ($n) => (int) $n)->flip();
+        $next = (int) $last + 1;
+        while (isset($used[$next]) && $next < (int) $last + 50) {
+            $next++;
+        }
+
+        return ['last_bon' => $last, 'next_bon' => str_pad((string) $next, $width, '0', STR_PAD_LEFT)];
+    }
+
+    /**
+     * The carnets are reused: the same n° comes back months later on the same
+     * citerne (85751A55: bons 1905-1911 in March and again in October). So a
+     * n° only counts as a duplicate within BON_WINDOW_DAYS of the bon's date.
+     */
+    public const BON_WINDOW_DAYS = 60;
+
+    protected function ensureNewBon(FuelTank $tank, string $number, string $date, ?int $exceptId = null): void
     {
         $normalized = FuelMovement::normalizeBon($number);
+        $day = \Illuminate\Support\Carbon::parse($date);
         $existing = FuelMovement::where('fuel_tank_id', $tank->id)
             ->where('type', 'exit')
             ->whereNotNull('bon_number')
+            ->whereBetween('date', [$day->copy()->subDays(self::BON_WINDOW_DAYS)->toDateString(), $day->copy()->addDays(self::BON_WINDOW_DAYS)->toDateString()])
             ->when($exceptId, fn ($q) => $q->where('id', '!=', $exceptId))
             ->whereRaw("TRIM(LEADING '0' FROM REPLACE(UPPER(bon_number), ' ', '')) = ?", [$normalized])
             ->first(['date', 'vehicle_code', 'origin']);

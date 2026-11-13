@@ -642,7 +642,8 @@ function BonForm({
   const startTime = bon ? hhmm(bon.time) : nowHhmm();
   const firstDriver = (v: BonVehicle | null) => (v ? (shiftOf(startTime) === 1 ? (v.driver_1 ?? v.driver_2) : (v.driver_2 ?? v.driver_1)) : null);
   const [form, setForm] = useState<FormState>({
-    bon_number: str(bon?.bon_number),
+    // The next n° in sequence, pre-filled; the pompiste can type another one.
+    bon_number: bon ? str(bon.bon_number) : (tank.next_bon ?? ''),
     date: bon?.date ?? todayIso(),
     time: startTime,
     company: bon ? (bon.company ? (known ? bon.company : 'AUTRES') : '') : 'TRANSWIN',
@@ -930,7 +931,25 @@ function BonForm({
                 placeholder="0075951"
                 value={form.bon_number}
                 onChange={set('bon_number')}
+                // Tapping the field selects the suggested n°, so typing another one simply replaces it.
+                onFocus={(e) => e.target.select()}
               />
+              {!bon && tank.next_bon && (
+                <p className="mt-1.5 flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400">
+                  {form.bon_number === tank.next_bon ? (
+                    <>
+                      <CheckCircle2 size={15} className="shrink-0 text-emerald-500" />
+                      <span>
+                        Rempli tout seul : le bon après le n° {tank.last_bon}. <b className="text-slate-700 dark:text-slate-200">Changez-le</b> si votre bon porte un autre numéro.
+                      </span>
+                    </>
+                  ) : (
+                    <button type="button" onClick={() => setForm((f) => ({ ...f, bon_number: tank.next_bon ?? '' }))} className="font-semibold text-orange-600 underline-offset-2 active:underline dark:text-orange-400">
+                      Remettre le n° suivant ({tank.next_bon})
+                    </button>
+                  )}
+                </p>
+              )}
             </Big>
             <div className="grid grid-cols-2 gap-3">
               <Big label="Série départ">

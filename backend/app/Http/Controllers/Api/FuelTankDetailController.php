@@ -76,7 +76,7 @@ class FuelTankDetailController extends Controller
         }));
     }
 
-    /** One page of the citerne's lines, in the sheet's order; `page=last` opens on the newest lines. */
+    /** One page of the citerne's lines: the sheet's order, or newest first with `order=desc`; `page=last` opens on the last page. */
     public function index(Request $request)
     {
         $tank = $this->tank($request);
@@ -93,8 +93,12 @@ class FuelTankDetailController extends Controller
         $lastPage = max(1, (int) ceil($count / $perPage));
         $page = $request->query('page') === 'last' ? $lastPage : min(max((int) $request->query('page', 1), 1), $lastPage);
 
-        $rows = $this->ordered($query)->forPage($page, $perPage)->get();
-        $lines = $this->mergeLines($rows);
+        // On screen the newest lines come first (`order=desc`, page 1 = the latest);
+        // the export keeps the sheet's own order. Lines are merged in the sheet's
+        // order (an ENTREE before its SORTIE), then turned back.
+        $newestFirst = $request->query('order') === 'desc';
+        $rows = $this->ordered($query, $newestFirst)->forPage($page, $perPage)->get();
+        $lines = $newestFirst ? array_reverse($this->mergeLines($rows->reverse()->values())) : $this->mergeLines($rows);
 
         return response()->json([
             'data' => $lines,
@@ -162,18 +166,20 @@ class FuelTankDetailController extends Controller
      * without séries falls back on its hour; an ENTREE comes before the
      * SORTIE of its line (same série, lower id).
      */
-    protected function ordered(Builder $query): Builder
+    protected function ordered(Builder $query, bool $newestFirst = false): Builder
     {
+        $dir = $newestFirst ? 'desc' : 'asc';
+
         return $query
             ->select('m.id', 'm.type', 'm.date', 'm.time', 'm.quantity', 'm.supplier', 'm.bon_number', 'm.vehicle_code',
                 'm.odometer', 'm.serie_start', 'm.serie_end', 'm.remark', 'm.origin', 'm.source_row')
             ->selectRaw('COALESCE(m.plate_label, v.matricule) as matricule')
             ->selectRaw('(SELECT COUNT(*) FROM fuel_bon_attachments a WHERE a.fuel_movement_id = m.id) as attachments_count')
-            ->orderBy('m.date')
-            ->orderByRaw('m.serie_start IS NULL')
-            ->orderBy('m.serie_start')
-            ->orderByRaw("COALESCE(m.time, '00:00:00')")
-            ->orderBy('m.id');
+            ->orderBy('m.date', $dir)
+            ->orderByRaw('m.serie_start IS NULL '.$dir)
+            ->orderBy('m.serie_start', $dir)
+            ->orderByRaw("COALESCE(m.time, '00:00:00') ".$dir)
+            ->orderBy('m.id', $dir);
     }
 
     /**

@@ -62,11 +62,26 @@ class FuelImportService
                 // A bon typed by the pompiste (origin = 'bon') is never deleted
                 // by a re-import, and the Excel line carrying the same n° de bon
                 // is skipped so the refuel isn't counted twice.
-                $typedBons = $tank->movements()->where('origin', 'bon')->whereNotNull('bon_number')->pluck('bon_number')
-                    ->map(fn ($n) => FuelMovement::normalizeBon($n))->filter()->flip();
-                $source = $typedBons->isEmpty() ? $result['rows'] : array_values(array_filter(
+                // Same n° AND a close date (±3 days): the carnets are reused, so the
+                // same n° months apart is another bon, not this one.
+                $typedBons = [];
+                foreach ($tank->movements()->where('origin', 'bon')->whereNotNull('bon_number')->get(['bon_number', 'date']) as $bon) {
+                    $typedBons[(string) FuelMovement::normalizeBon($bon->bon_number)][] = $bon->date->getTimestamp();
+                }
+                $isTyped = function (array $row) use ($typedBons): bool {
+                    $dates = $typedBons[(string) FuelMovement::normalizeBon($row['bon_number'] ?? null)] ?? [];
+                    $at = strtotime($row['date']);
+                    foreach ($dates as $date) {
+                        if (abs($at - $date) <= 3 * 86400) {
+                            return true;
+                        }
+                    }
+
+                    return false;
+                };
+                $source = $typedBons === [] ? $result['rows'] : array_values(array_filter(
                     $result['rows'],
-                    fn ($row) => $row['type'] !== 'exit' || ! $typedBons->has((string) FuelMovement::normalizeBon($row['bon_number'] ?? null)),
+                    fn ($row) => $row['type'] !== 'exit' || ! $isTyped($row),
                 ));
                 $rows = array_map(fn ($row) => $row + ['fuel_tank_id' => $tank->id, 'site_id' => $siteId], $source);
                 foreach (array_chunk($rows, 1000) as $chunk) {

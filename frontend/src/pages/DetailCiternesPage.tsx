@@ -89,7 +89,7 @@ export default function DetailCiternesPage() {
   const [dateTo, setDateTo] = useState('');
   const [search, setSearch] = useState('');
   const [type, setType] = useState<'' | 'entry' | 'exit'>('');
-  const [page, setPage] = useState<number | 'last'>('last');
+  const [page, setPage] = useState(1);
   const [exporting, setExporting] = useState(false);
 
   const tanksQuery = useQuery({
@@ -115,14 +115,14 @@ export default function DetailCiternesPage() {
       p.set('citerne', String(id));
       return p;
     }, { replace: true });
-    setPage('last');
+    setPage(1);
   };
 
   const filters = { fuel_tank_id: tank?.id, date_from: dateFrom || undefined, date_to: dateTo || undefined, search: search || undefined, type: type || undefined };
 
   const linesQuery = useQuery({
     queryKey: ['citerne-detail', filters, page],
-    queryFn: () => api.get<DetailPage>('/citernes/detail', { params: { ...filters, page, per_page: 100 } }).then((r) => r.data),
+    queryFn: () => api.get<DetailPage>('/citernes/detail', { params: { ...filters, order: 'desc', page, per_page: 100 } }).then((r) => r.data),
     enabled: !!tank && !phone,
     placeholderData: (prev) => prev,
   });
@@ -130,7 +130,7 @@ export default function DetailCiternesPage() {
 
   const resetPage = <T,>(setter: (v: T) => void) => (v: T) => {
     setter(v);
-    setPage('last');
+    setPage(1);
   };
 
   const exportExcel = async () => {
@@ -283,7 +283,7 @@ export default function DetailCiternesPage() {
             {data && <Pagination page={data.current_page} lastPage={data.last_page} total={data.total} onPageChange={setPage} />}
           </div>
           <p className="text-xs text-slate-400 dark:text-slate-500">
-            Les lignes suivent l'ordre du fichier (jour par jour, série de la pompe). La dernière page s'ouvre en premier. L'export reprend les filtres affichés.
+            Les plus récentes en haut. Le fichier Excel exporté garde l'ordre du fichier d'origine (du plus ancien au plus récent) et reprend les filtres affichés.
           </p>
         </>
       )}
@@ -353,7 +353,8 @@ function PhoneDetail({
   const params = {
     fuel_tank_id: tankId,
     type: type || undefined,
-    ...(searching ? { search: search.trim(), page: 'last', per_page: 100 } : { date_from: day, date_to: day, page: 1, per_page: 500 }),
+    order: 'desc',
+    ...(searching ? { search: search.trim(), page: 1, per_page: 100 } : { date_from: day, date_to: day, page: 1, per_page: 500 }),
   };
   const query = useQuery({
     queryKey: ['citerne-detail-phone', params],
@@ -361,8 +362,8 @@ function PhoneDetail({
     enabled: !!tankId,
     placeholderData: (prev) => prev,
   });
-  // Newest first: what the pompiste just served is at the top.
-  const lines = useMemo(() => [...(query.data?.data ?? [])].reverse(), [query.data]);
+  // Newest first (order=desc): what the pompiste just served is at the top.
+  const lines = query.data?.data ?? [];
   const totals = query.data?.totals;
 
   const download = async () => {

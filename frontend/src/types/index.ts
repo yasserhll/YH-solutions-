@@ -846,6 +846,9 @@ export interface BonTank {
   name: string;
   site: { id: number; name: string };
   last_serie: number | null;
+  /** Highest n° among the citerne's latest bons, and the suggested n° for the next one (editable). */
+  last_bon: string | null;
+  next_bon: string | null;
   bons: number;
   today_count: number;
   today_litres: number;
