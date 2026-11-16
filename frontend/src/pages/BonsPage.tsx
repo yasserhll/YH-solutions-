@@ -658,7 +658,8 @@ function BonForm({
     pompiste_name: bon?.pompiste_name ?? user?.name ?? '',
     remark: str(bon?.remark),
   });
-  const [litresTouched, setLitresTouched] = useState(!!bon);
+  // Which of the two was typed last: it wins and the other is computed from it.
+  const [computed, setComputed] = useState<'end' | 'litres' | null>(null);
   const [vehicle, setVehicle] = useState<BonVehicle | null>(initialVehicle ?? (bon ? (vehicles.find((v) => v.code === bon.vehicle_code) ?? null) : null));
   const [outOfPark, setOutOfPark] = useState(!!scannedCode || (!!bon && !vehicles.some((v) => v.code === bon.vehicle_code)));
   const [vehicleSearch, setVehicleSearch] = useState('');
@@ -698,9 +699,38 @@ function BonForm({
   const start = num(form.serie_start);
   const end = num(form.serie_end);
   const pumped = start !== null && end !== null && !Number.isNaN(start) && !Number.isNaN(end) ? Math.round((end - start) * 100) / 100 : null;
-  useEffect(() => {
-    if (!litresTouched && pumped !== null && pumped > 0) setForm((f) => ({ ...f, quantity: String(pumped) }));
-  }, [pumped, litresTouched]);
+  // Série fin and litres are tied (fin = départ + litres): whichever the pompiste
+  // types last is right, the other is corrected from it — so a wrong série fin
+  // is fixed just by typing the litres shown on the pump, and the other way round.
+  const round2 = (v: number) => String(Math.round(v * 100) / 100);
+  const onSerieStart = (e: { target: { value: string } }) => {
+    const value = e.target.value;
+    setForm((f) => {
+      const s = num(value);
+      const q = num(f.quantity);
+      return s !== null && !Number.isNaN(s) && q !== null && !Number.isNaN(q) && q > 0 ? { ...f, serie_start: value, serie_end: round2(s + q) } : { ...f, serie_start: value };
+    });
+  };
+  const onSerieEnd = (e: { target: { value: string } }) => {
+    const value = e.target.value;
+    setForm((f) => {
+      const s = num(f.serie_start);
+      const end = num(value);
+      if (s === null || Number.isNaN(s) || end === null || Number.isNaN(end) || end - s <= 0) return { ...f, serie_end: value };
+      return { ...f, serie_end: value, quantity: round2(end - s) };
+    });
+    setComputed('litres');
+  };
+  const onLitres = (e: { target: { value: string } }) => {
+    const value = e.target.value;
+    setForm((f) => {
+      const s = num(f.serie_start);
+      const q = num(value);
+      if (s === null || Number.isNaN(s) || q === null || Number.isNaN(q) || q <= 0) return { ...f, quantity: value };
+      return { ...f, quantity: value, serie_end: round2(s + q) };
+    });
+    setComputed('end');
+  };
 
   const quantity = num(form.quantity);
   const litresMismatch = pumped !== null && quantity !== null && Math.abs(pumped - quantity) > 0.5;
@@ -953,10 +983,10 @@ function BonForm({
             </Big>
             <div className="grid grid-cols-2 gap-3">
               <Big label="Série départ">
-                <input className={bigInput} inputMode="decimal" value={form.serie_start} onChange={set('serie_start')} />
+                <input className={bigInput} inputMode="decimal" value={form.serie_start} onChange={onSerieStart} />
               </Big>
               <Big label="Série fin">
-                <input className={bigInput} inputMode="decimal" value={form.serie_end} onChange={set('serie_end')} />
+                <input className={clsx(bigInput, computed === 'end' && 'border-emerald-500 dark:border-emerald-500')} inputMode="decimal" value={form.serie_end} onChange={onSerieEnd} />
               </Big>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -965,10 +995,7 @@ function BonForm({
                   className={clsx(bigInput, litresMismatch && 'border-red-500 dark:border-red-500', pumped !== null && !litresMismatch && quantity !== null && 'border-emerald-500 dark:border-emerald-500')}
                   inputMode="decimal"
                   value={form.quantity}
-                  onChange={(e) => {
-                    setLitresTouched(true);
-                    set('quantity')(e);
-                  }}
+                  onChange={onLitres}
                 />
               </Big>
               <Big label="Compteur">
@@ -978,7 +1005,10 @@ function BonForm({
             <div className="space-y-1.5 text-sm">
               {pumped !== null && !litresMismatch && !endBeforeStart && quantity !== null && (
                 <p className="flex items-center gap-1.5 font-medium text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle2 size={16} /> Litres calculés : fin − départ = {fmt(pumped)} L
+                  <CheckCircle2 size={16} />{' '}
+                  {computed === 'end'
+                    ? `Série fin calculée : départ + ${fmt(quantity)} L = ${fmt(end)}`
+                    : `Litres calculés : fin − départ = ${fmt(pumped)} L`}
                 </p>
               )}
               {(litresMismatch || endBeforeStart) && (
