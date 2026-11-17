@@ -6,6 +6,7 @@ import {
   Siren,
   Truck,
   ReceiptText,
+  PackagePlus,
   Sheet,
   ClipboardList,
   Clock,
@@ -82,6 +83,7 @@ function navItemsFor(user: AuthUser | null): NavItem[] {
     { to: '/caisse', label: 'Caisse', icon: Wallet, module: 'caisse' },
     { to: '/consommation', label: 'Consommation', icon: Fuel, module: 'consommation' },
     { to: '/bons', label: 'Bons carburant', icon: ReceiptText, module: 'bons' },
+    { to: '/entrees-carburant', label: 'Entrées carburant', icon: PackagePlus, module: 'entrees_carburant' },
     // Détail citernes: open to the Consommation and the Bons carburant sessions alike.
     { to: '/detail-citernes', label: 'Détail citernes', icon: Sheet, show: hasModule(user, 'consommation') || hasModule(user, 'bons') },
     { to: '/materiel', label: 'Matériel', icon: Truck, module: 'materiel' },

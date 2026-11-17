@@ -50,7 +50,7 @@ interface DetailLine {
   remark: string | null;
   serie_start: number | null;
   serie_end: number | null;
-  origin: 'import' | 'manual' | 'bon';
+  origin: 'import' | 'manual' | 'bon' | 'livraison';
   attachments_count: number;
 }
 
@@ -263,6 +263,11 @@ export default function DetailCiternesPage() {
                             </span>
                           )}
                           {l.origin === 'manual' && <span className="rounded bg-slate-100 px-1 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-400">Manuel</span>}
+                          {l.origin === 'livraison' && (
+                            <span title={l.attachments_count ? `Livraison saisie par le pompiste · ${l.attachments_count} photo(s)` : 'Livraison de l’inventaire (Entrées carburant)'} className="rounded bg-sky-100 px-1 text-[10px] font-semibold text-sky-700 dark:bg-sky-500/15 dark:text-sky-400">
+                              Livraison
+                            </span>
+                          )}
                         </span>
                       </td>
                       <td className={clsx(td, 'tabular-nums')}>{l.time ?? ''}</td>
@@ -543,6 +548,9 @@ function PhoneLine({ line: l, showDate }: { line: DetailLine; showDate: boolean 
           )}
           {l.origin === 'manual' && (
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-400">Ajouté à la main</span>
+          )}
+          {l.origin === 'livraison' && (
+            <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-700 dark:bg-sky-500/15 dark:text-sky-400">Livraison</span>
           )}
         </div>
       )}

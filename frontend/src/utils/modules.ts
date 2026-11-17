@@ -20,6 +20,7 @@ export const MODULES: { key: ModuleKey; label: string; path: string }[] = [
   { key: 'caisse', label: 'Caisse', path: '/caisse' },
   { key: 'consommation', label: 'Consommation', path: '/consommation' },
   { key: 'bons', label: 'Bons carburant', path: '/bons' },
+  { key: 'entrees_carburant', label: 'Entrées carburant', path: '/entrees-carburant' },
   { key: 'materiel', label: 'Matériel', path: '/materiel' },
   { key: 'affectation_materiel', label: 'Affectation matériel', path: '/affectation-materiel' },
   { key: 'personnel', label: 'Personnel', path: '/personnel' },

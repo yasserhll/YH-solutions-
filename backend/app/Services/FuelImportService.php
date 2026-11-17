@@ -83,6 +83,27 @@ class FuelImportService
                     $result['rows'],
                     fn ($row) => $row['type'] !== 'exit' || ! $isTyped($row),
                 ));
+
+                // Same for a delivery typed in Entrées carburant (origin = 'livraison'):
+                // the sheet's ENTREE of the same quantity within ±3 days is that delivery.
+                $deliveries = $tank->movements()->where('origin', 'livraison')->get(['date', 'quantity'])
+                    ->map(fn ($m) => ['at' => $m->date->getTimestamp(), 'qty' => (float) $m->quantity, 'used' => false])->all();
+                if ($deliveries !== []) {
+                    $source = array_values(array_filter($source, function ($row) use (&$deliveries) {
+                        if ($row['type'] !== 'entry') {
+                            return true;
+                        }
+                        foreach ($deliveries as &$d) {
+                            if (! $d['used'] && abs(strtotime($row['date']) - $d['at']) <= 3 * 86400 && abs((float) $row['quantity'] - $d['qty']) <= 1) {
+                                $d['used'] = true;
+
+                                return false;
+                            }
+                        }
+
+                        return true;
+                    }));
+                }
                 $rows = array_map(fn ($row) => $row + ['fuel_tank_id' => $tank->id, 'site_id' => $siteId], $source);
                 foreach (array_chunk($rows, 1000) as $chunk) {
                     DB::table('fuel_movements')->insert($chunk);
@@ -147,7 +168,7 @@ class FuelImportService
             $applied++;
         }
 
-        return $applied + $tank->movements()->whereIn('origin', ['manual', 'bon'])->count();
+        return $applied + $tank->movements()->whereIn('origin', ['manual', 'bon', 'livraison'])->count();
     }
 
     /**

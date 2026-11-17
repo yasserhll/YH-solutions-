@@ -10,6 +10,7 @@ import { hasModule, homePath } from './utils/modules';
 import type { ModuleKey } from './types';
 import LoginPage from './pages/LoginPage';
 import BonsPage from './pages/BonsPage';
+import EntreesCarburantPage from './pages/EntreesCarburantPage';
 import DashboardPage from './pages/DashboardPage';
 import PersonnelPage from './pages/PersonnelPage';
 import EmployeeDetailPage from './pages/EmployeeDetailPage';
@@ -236,6 +237,14 @@ export default function App() {
                     element={
                       <RequireModule module="bons">
                         <BonsPage />
+                      </RequireModule>
+                    }
+                  />
+                  <Route
+                    path="/entrees-carburant"
+                    element={
+                      <RequireModule module="entrees_carburant">
+                        <EntreesCarburantPage />
                       </RequireModule>
                     }
                   />

@@ -104,7 +104,7 @@ function matchQr(text: string, vehicles: BonVehicle[]): { vehicle: BonVehicle | 
 }
 
 /** Phone photos are 3–6 MB: shrink to ~1600 px JPEG before sending (keeps the original if it can't be read). */
-async function compress(file: File): Promise<File> {
+export async function compress(file: File): Promise<File> {
   if (!file.type.startsWith('image/') || file.type === 'image/gif') return file;
   try {
     const bitmap = await createImageBitmap(file);
@@ -556,7 +556,7 @@ function AttachmentsModal({ bon, onClose }: { bon: FuelBon; onClose: () => void 
 }
 
 /** Full screen on a phone, a centred panel on a computer; the save button always visible at the bottom. */
-function Sheet({ title, onClose, children, footer }: { title: string; onClose: () => void; children: ReactNode; footer: ReactNode }) {
+export function Sheet({ title, onClose, children, footer }: { title: string; onClose: () => void; children: ReactNode; footer: ReactNode }) {
   useEffect(() => {
     const previous = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -580,12 +580,12 @@ function Sheet({ title, onClose, children, footer }: { title: string; onClose: (
   );
 }
 
-const bigInput =
+export const bigInput =
   'h-14 w-full rounded-xl border-2 border-slate-300 bg-white px-4 text-xl font-semibold tabular-nums text-slate-900 focus:border-orange-500 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100';
-const smallInput =
+export const smallInput =
   'h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-base text-slate-900 focus:border-slate-500 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100';
 
-function Big({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
+export function Big({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
   return (
     <label className="block">
       <span className="mb-1.5 block text-base font-semibold text-slate-700 dark:text-slate-200">{label}</span>

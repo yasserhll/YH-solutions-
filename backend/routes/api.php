@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\FuelBonController;
 use App\Http\Controllers\Api\FuelTankDetailController;
+use App\Http\Controllers\Api\FuelDeliveryController;
 use App\Http\Controllers\Api\ContractController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CashAccountController;
@@ -193,6 +194,21 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/bons/{fuelMovement}/attachments', [FuelBonController::class, 'attachments']);
         Route::get('/bons/{fuelMovement}/attachments/{attachment}', [FuelBonController::class, 'attachment']);
         Route::delete('/bons/{fuelMovement}/attachments/{attachment}', [FuelBonController::class, 'destroyAttachment']);
+    });
+
+    // Entrées carburant: the deliveries into the citernes (BL typed by the pompiste) and their prices.
+    Route::middleware('module:entrees_carburant')->group(function () {
+        Route::get('/entrees/tanks', [FuelDeliveryController::class, 'tanks']);
+        Route::get('/entrees/summary', [FuelDeliveryController::class, 'summary']);
+        Route::get('/entrees/export', [FuelDeliveryController::class, 'export']);
+        Route::post('/entrees/import', [FuelDeliveryController::class, 'import']);
+        Route::get('/entrees', [FuelDeliveryController::class, 'index']);
+        Route::post('/entrees', [FuelDeliveryController::class, 'store']);
+        Route::post('/entrees/{delivery}', [FuelDeliveryController::class, 'update'])->whereNumber('delivery');
+        Route::delete('/entrees/{delivery}', [FuelDeliveryController::class, 'destroy'])->whereNumber('delivery');
+        Route::get('/entrees/{delivery}/attachments', [FuelDeliveryController::class, 'attachments']);
+        Route::get('/entrees/{delivery}/attachments/{attachment}', [FuelDeliveryController::class, 'attachment']);
+        Route::delete('/entrees/{delivery}/attachments/{attachment}', [FuelDeliveryController::class, 'destroyAttachment']);
     });
 
     // Détail citernes: each citerne line by line like its Excel sheet, + its replica export.

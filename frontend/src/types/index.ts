@@ -44,6 +44,7 @@ export type ModuleKey =
   | 'caisse'
   | 'consommation'
   | 'bons'
+  | 'entrees_carburant'
   | 'materiel'
   | 'affectation_materiel'
   | 'personnel'
@@ -775,7 +776,7 @@ export interface FuelGlobalRow {
   bon_number: string | null;
   fuel_tank_id: number;
   /** 'manual' = added by hand from the Global; an imported row edited by hand has edited = true. */
-  origin: 'import' | 'manual' | 'bon';
+  origin: 'import' | 'manual' | 'bon' | 'livraison';
   edited: boolean;
   is_transfer: boolean;
   tank: string;
@@ -876,7 +877,7 @@ export interface FuelBon {
   driver_cin: string | null;
   pompiste_name: string | null;
   remark: string | null;
-  origin: 'import' | 'manual' | 'bon';
+  origin: 'import' | 'manual' | 'bon' | 'livraison';
   created_by: number | null;
   creator_name: string | null;
   created_at: string | null;
