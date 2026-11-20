@@ -43,9 +43,23 @@ function forgetUser() {
   }
 }
 
+/** A real /me payload — not a Wi-Fi login page or a proxy error served as 200. */
+function isAuthUser(data: unknown): data is AuthUser {
+  const d = data as Partial<AuthUser> | null;
+  return !!d && typeof d === 'object' && typeof d.id === 'number' && typeof d.role === 'string';
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  // Offline-first, like an installed app: a session already opened on this
+  // device starts AT ONCE from its saved identity — no waiting on the
+  // server, no logout when there is no network (or the server / proxy
+  // answers an error page). /me then refreshes it in the background; only
+  // a real 401 ends the session (the axios interceptor drops the token).
+  const [user, setUser] = useState<AuthUser | null>(() => {
+    const token = localStorage.getItem('token');
+    return token ? rememberedUser(token) : null;
+  });
+  const [isLoading, setIsLoading] = useState(() => !!localStorage.getItem('token') && user === null);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -54,23 +68,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
       return;
     }
-    api
-      .get<AuthUser>('/me')
-      .then((res) => {
-        setUser(res.data);
-        rememberUser(token, res.data);
-      })
-      .catch((error) => {
-        // Opening the app without network must NOT log out (it used to: the
-        // token was dropped on any /me failure, so the offline mode was
-        // unusable). Only a real 401 ends the session — the axios
-        // interceptor removes the token then. No answer at all: this
-        // session's last known identity, saved on this device.
-        if (error?.response) return;
-        const saved = rememberedUser(token);
-        if (saved) setUser(saved);
-      })
-      .finally(() => setIsLoading(false));
+    let stopped = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+
+    const refresh = () =>
+      api
+        .get<AuthUser>('/me')
+        .then((res) => {
+          if (stopped) return;
+          if (!isAuthUser(res.data)) throw new Error('not the API');
+          setUser(res.data);
+          rememberUser(token, res.data);
+          setIsLoading(false);
+        })
+        .catch((error) => {
+          if (stopped) return;
+          if (error?.response?.status === 401) {
+            setUser(null);
+            setIsLoading(false);
+            return;
+          }
+          // Server unreachable. With a saved identity the app already runs;
+          // without one (first start of this version) keep the session and
+          // try again — RequireAuth shows "connexion au serveur…", never
+          // the login page.
+          if (!rememberedUser(token)) retry = setTimeout(refresh, 5000);
+        });
+
+    refresh();
+    return () => {
+      stopped = true;
+      if (retry) clearTimeout(retry);
+    };
   }, []);
 
   async function login(email: string, password: string) {

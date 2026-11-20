@@ -60,6 +60,9 @@ export default defineConfig({
         // handlers live in public/push-sw.js (see usePushNotifications).
         // Offline API layer (cache + write queue): public/offline-sw.js.
         importScripts: [versioned('push-sw.js'), versioned('offline-sw.js')],
+        // Images and fonts too, not only js/css/html (the default): the logo
+        // was missing when the app was opened offline.
+        globPatterns: ['**/*.{js,css,html,ico,png,jpg,jpeg,svg,webp,woff,woff2}'],
         cleanupOutdatedCaches: true,
         clientsClaim: true,
         navigateFallback: '/index.html',

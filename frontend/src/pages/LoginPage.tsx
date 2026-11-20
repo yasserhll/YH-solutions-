@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
+import { CloudOff, Loader2 } from 'lucide-react';
+import axios from 'axios';
+import { useConnectivity } from '../components/ConnectionStatus';
 import { useAuth } from '../contexts/AuthContext';
 import { apiErrorMessage } from '../api/client';
 import { Brand } from '../components/ui/Brand';
@@ -13,6 +15,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const { online } = useConnectivity();
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -22,7 +25,12 @@ export default function LoginPage() {
       await login(email, password);
       navigate('/');
     } catch (err) {
-      setError(apiErrorMessage(err, 'Identifiants incorrects.'));
+      // No answer: say it plainly, it's not a wrong password.
+      setError(
+        axios.isAxiosError(err) && !err.response
+          ? 'Pas de connexion au serveur. La première connexion à un compte demande le réseau ; ensuite l’application fonctionne aussi hors ligne.'
+          : apiErrorMessage(err, 'Identifiants incorrects.'),
+      );
     } finally {
       setIsLoading(false);
     }
@@ -36,6 +44,13 @@ export default function LoginPage() {
         </div>
         <h1 className="mb-1 text-center text-lg font-semibold text-slate-900 dark:text-slate-100">Gestion RH & Administrative</h1>
         <p className="mb-6 text-center text-sm text-slate-500 dark:text-slate-400">Connectez-vous à votre espace</p>
+
+        {!online && (
+          <div className="mb-4 flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-xs text-amber-800 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/30">
+            <CloudOff size={16} className="mt-0.5 shrink-0" />
+            <span>Hors connexion. Se connecter à un compte demande le réseau ; une fois connecté, l’application fonctionne hors ligne et ne vous déconnecte plus.</span>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <TextField

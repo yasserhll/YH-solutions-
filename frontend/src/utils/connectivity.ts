@@ -55,7 +55,8 @@ export function checkConnectivity(): Promise<boolean> {
       const timer = setTimeout(() => controller.abort(), 5000);
       try {
         const res = await fetch(`/api/ping?t=${Date.now()}`, { cache: 'no-store', signal: controller.signal, headers: { Accept: 'application/json' } });
-        ok = res.ok;
+        // The real API, not a proxy error or a Wi-Fi login page answering 200.
+        ok = res.ok && (await res.json().catch(() => null))?.ok === true;
       } catch {
         ok = false;
       } finally {

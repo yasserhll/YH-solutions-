@@ -1,4 +1,5 @@
 import { Suspense, useState } from 'react';
+import { ConnectionStatus } from '../components/ConnectionStatus';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -286,6 +287,8 @@ export function DashboardLayout() {
           </button>
           <div className="ml-auto flex min-w-0 items-center gap-2">
             {/* Contracts ending / ended: opens by itself on the Dashboard. */}
+            {/* Hors ligne / envoi en cours: a chip, never a bar over the header. */}
+            <ConnectionStatus />
             <ContractNotifications autoOpen={location.pathname === '/'} />
             {isSuperAdmin || filterableSites.length > 1 ? (
               <SiteSwitcher sites={filterableSites} />
