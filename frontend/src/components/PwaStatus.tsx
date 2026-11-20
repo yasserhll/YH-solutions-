@@ -1,7 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { registerSW } from 'virtual:pwa-register';
 import toast from 'react-hot-toast';
-import { WifiOff, DownloadCloud, RefreshCw } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { WifiOff, DownloadCloud, RefreshCw, CloudUpload } from 'lucide-react';
+import {
+  askServiceWorker,
+  checkConnectivity,
+  getConnectivity,
+  setQueuedCount,
+  subscribeConnectivity,
+} from '../utils/connectivity';
+
+type SyncFailure = { method: string; url: string; status?: number; message: string };
 
 /**
  * Registers the service worker and surfaces the things a user actually needs
@@ -16,12 +26,14 @@ import { WifiOff, DownloadCloud, RefreshCw } from 'lucide-react';
  * going through the proper PWA update path (skip-waiting + controllerchange)
  * rather than a plain `location.reload()`, which wouldn't hand control to
  * the new worker on its own. The banner is persistent (not a toast) and the
- * existing 30-minute poll (`onRegisteredSW`) still re-checks for updates on
+ * 30-second poll (`onRegisteredSW`, plus focus / foreground) re-checks for updates on
  * a long-lived tab, so a shipped fix can't go unnoticed the way an ephemeral
  * toast could.
  */
 export function PwaStatus() {
-  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const queryClient = useQueryClient();
+  const [conn, setConn] = useState(getConnectivity);
+  const isOffline = !conn.online;
   const [needRefresh, setNeedRefresh] = useState(false);
   const updateSWRef = useRef<((reloadPage?: boolean) => Promise<void>) | null>(null);
 
@@ -45,35 +57,83 @@ export function PwaStatus() {
         // day) otherwise only checks for a new version on navigation —
         // poll too, so the RECHARGER banner can appear without anyone
         // needing to close the tab first.
+        // A deploy must be offered within seconds, not after half an
+        // hour: check every 30 s (one small request for sw.js, the browser
+        // bypasses its HTTP cache for it), and at once whenever the app
+        // comes back to the foreground, gets the focus or the network.
+        // Throttled so these triggers never pile up.
         if (!registration) return;
-        setInterval(() => registration.update(), 30 * 60 * 1000);
-
-        // The 30-minute poll alone is too slow for how this app is actually
-        // used on a tablet or as an installed PWA: it's backgrounded and
-        // foregrounded constantly rather than closed, so a deploy made while
-        // it sat in the background could otherwise go unnoticed for up to
-        // half an hour. Checking again the moment it comes back to the
-        // foreground (switching back to the tab, reopening the installed
-        // app, unlocking the tablet) catches that case immediately instead.
+        let lastCheck = 0;
+        const checkForUpdate = () => {
+          if (Date.now() - lastCheck < 10_000 || !navigator.onLine) return;
+          lastCheck = Date.now();
+          registration.update().catch(() => undefined);
+        };
+        setInterval(checkForUpdate, 30_000);
         document.addEventListener('visibilitychange', () => {
-          if (document.visibilityState === 'visible') registration.update();
+          if (document.visibilityState === 'visible') checkForUpdate();
         });
+        window.addEventListener('focus', checkForUpdate);
+        window.addEventListener('online', checkForUpdate);
       },
     });
     updateSWRef.current = updateSW;
 
-    function goOffline() {
-      setIsOffline(true);
+    // Connectivity: a real check of the server, not navigator.onLine alone
+    // (see utils/connectivity.ts). The browser's events only trigger it.
+    let wasOnline = getConnectivity().online;
+    const unsubscribe = subscribeConnectivity((next) => {
+      setConn(next);
+      if (next.online && !wasOnline) {
+        // Back online: refetch what was shown from the offline copy.
+        queryClient.invalidateQueries();
+        if (next.queued === 0) toast.success('Connexion rétablie.', { id: 'online', duration: 2500 });
+      }
+      wasOnline = next.online;
+    });
+    const check = () => void checkConnectivity();
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (!getConnectivity().online) check();
+      askServiceWorker('flush-offline-queue');
+    };
+    window.addEventListener('offline', check);
+    window.addEventListener('online', check);
+    document.addEventListener('visibilitychange', onVisible);
+    if (!navigator.onLine) check();
+
+    // The service worker's write queue: how many actions wait, and what
+    // happened when they were sent.
+    function onSwMessage(event: MessageEvent) {
+      const data = event.data as { type?: string; count?: number; sent?: number; failed?: SyncFailure[]; remaining?: number };
+      if (data?.type === 'offline-queue') setQueuedCount(data.count ?? 0);
+      if (data?.type === 'offline-sync') {
+        setQueuedCount(data.remaining ?? 0);
+        if (data.sent) {
+          toast.success(
+            data.sent === 1 ? '1 action faite hors connexion a été envoyée.' : `${data.sent} actions faites hors connexion ont été envoyées.`,
+            { id: 'offline-sync', duration: 4000 },
+          );
+        }
+        (data.failed ?? []).forEach((f, i) =>
+          toast.error(`Action hors connexion refusée par le serveur : ${f.message}`, { id: `offline-failed-${Date.now()}-${i}`, duration: 10000 }),
+        );
+        queryClient.invalidateQueries();
+      }
     }
-    function goOnline() {
-      setIsOffline(false);
-      toast.success('Connexion rétablie — synchronisation en cours...', { duration: 3000 });
-    }
-    window.addEventListener('offline', goOffline);
-    window.addEventListener('online', goOnline);
+    navigator.serviceWorker?.addEventListener('message', onSwMessage);
+    // App (re)opened: send whatever was left waiting, and show the count.
+    navigator.serviceWorker?.ready.then(() => {
+      askServiceWorker('offline-queue-status');
+      askServiceWorker('flush-offline-queue');
+    });
+
     return () => {
-      window.removeEventListener('offline', goOffline);
-      window.removeEventListener('online', goOnline);
+      unsubscribe();
+      window.removeEventListener('offline', check);
+      window.removeEventListener('online', check);
+      document.removeEventListener('visibilitychange', onVisible);
+      navigator.serviceWorker?.removeEventListener('message', onSwMessage);
     };
   }, []);
 
@@ -117,18 +177,30 @@ export function PwaStatus() {
     }, 2000);
   }
 
-  if (!isOffline && !needRefresh) return null;
+  const syncing = !isOffline && conn.queued > 0;
+  const pending = conn.queued === 1 ? '1 action en attente d’envoi' : `${conn.queued} actions en attente d’envoi`;
+
+  if (!isOffline && !needRefresh && !syncing) return null;
 
   return (
     <>
       {isOffline && (
-        <div className="fixed inset-x-0 top-0 z-[60] flex items-center justify-center gap-2 bg-amber-500 py-1.5 text-xs font-medium text-white shadow">
-          <WifiOff size={13} />
-          Hors connexion — vous consultez les dernières données enregistrées, vos actions seront synchronisées au retour du réseau.
+        <div className="fixed inset-x-0 top-0 z-[60] flex items-center justify-center gap-2 bg-amber-500 safe-px pb-1.5 pt-[max(0.375rem,env(safe-area-inset-top))] text-center text-xs font-medium text-white shadow">
+          <WifiOff size={13} className="shrink-0" />
+          <span>
+            Hors connexion — vous consultez les dernières données enregistrées, vos actions seront envoyées au retour du réseau.
+            {conn.queued > 0 && <strong className="ml-1">({pending})</strong>}
+          </span>
+        </div>
+      )}
+      {syncing && (
+        <div className="fixed inset-x-0 top-0 z-[60] flex items-center justify-center gap-2 bg-sky-600 safe-px pb-1.5 pt-[max(0.375rem,env(safe-area-inset-top))] text-center text-xs font-medium text-white shadow">
+          <CloudUpload size={13} className="shrink-0 animate-pulse" />
+          Envoi des actions faites hors connexion… ({pending})
         </div>
       )}
       {needRefresh && (
-        <div className="fixed inset-x-0 bottom-0 z-[60] flex flex-wrap items-center justify-center gap-3 border-t border-sky-300/20 bg-sky-500/10 px-4 py-3 text-sm font-medium text-white shadow-lg backdrop-blur-sm">
+        <div className="fixed inset-x-0 bottom-0 z-[60] flex flex-wrap items-center justify-center gap-3 border-t border-sky-300/20 bg-sky-500/10 safe-px pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] text-sm font-medium text-white shadow-lg backdrop-blur-sm">
           <RefreshCw size={16} className="shrink-0 text-sky-300" />
           <span>Une nouvelle version est disponible.</span>
           <button

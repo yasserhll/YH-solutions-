@@ -8,32 +8,33 @@ import { PwaStatus } from './components/PwaStatus';
 import { DashboardLayout } from './layouts/DashboardLayout';
 import { hasModule, homePath } from './utils/modules';
 import type { ModuleKey } from './types';
+import { lazyPage, preloadPages } from './utils/lazyPage';
 import LoginPage from './pages/LoginPage';
-import BonsPage from './pages/BonsPage';
-import EntreesCarburantPage from './pages/EntreesCarburantPage';
-import DashboardPage from './pages/DashboardPage';
-import PersonnelPage from './pages/PersonnelPage';
-import EmployeeDetailPage from './pages/EmployeeDetailPage';
-import AttendancePage from './pages/AttendancePage';
-import LeavesPage from './pages/LeavesPage';
-import SanctionsPage from './pages/SanctionsPage';
-import MovementsPage from './pages/MovementsPage';
-import ContractsPage from './pages/ContractsPage';
-import AssignmentsPage from './pages/AssignmentsPage';
-import OvertimePage from './pages/OvertimePage';
-import CashPage from './pages/CashPage';
-import ConsommationPage from './pages/ConsommationPage';
-import UsersPage from './pages/UsersPage';
-import ReportsPage from './pages/ReportsPage';
-import HistoriquePage from './pages/HistoriquePage';
-import SettingsPage from './pages/SettingsPage';
-import HseReportsPage from './pages/HseReportsPage';
-import HseDashboardPage from './pages/HseDashboardPage';
-import HseUsersPage from './pages/HseUsersPage';
-import HseAccidentsPage from './pages/HseAccidentsPage';
-import MaterielPage from './pages/MaterielPage';
-import AffectationMaterielPage from './pages/AffectationMaterielPage';
-import DetailCiternesPage from './pages/DetailCiternesPage';
+const BonsPage = lazyPage(() => import('./pages/BonsPage'));
+const EntreesCarburantPage = lazyPage(() => import('./pages/EntreesCarburantPage'));
+const DashboardPage = lazyPage(() => import('./pages/DashboardPage'));
+const PersonnelPage = lazyPage(() => import('./pages/PersonnelPage'));
+const EmployeeDetailPage = lazyPage(() => import('./pages/EmployeeDetailPage'));
+const AttendancePage = lazyPage(() => import('./pages/AttendancePage'));
+const LeavesPage = lazyPage(() => import('./pages/LeavesPage'));
+const SanctionsPage = lazyPage(() => import('./pages/SanctionsPage'));
+const MovementsPage = lazyPage(() => import('./pages/MovementsPage'));
+const ContractsPage = lazyPage(() => import('./pages/ContractsPage'));
+const AssignmentsPage = lazyPage(() => import('./pages/AssignmentsPage'));
+const OvertimePage = lazyPage(() => import('./pages/OvertimePage'));
+const CashPage = lazyPage(() => import('./pages/CashPage'));
+const ConsommationPage = lazyPage(() => import('./pages/ConsommationPage'));
+const UsersPage = lazyPage(() => import('./pages/UsersPage'));
+const ReportsPage = lazyPage(() => import('./pages/ReportsPage'));
+const HistoriquePage = lazyPage(() => import('./pages/HistoriquePage'));
+const SettingsPage = lazyPage(() => import('./pages/SettingsPage'));
+const HseReportsPage = lazyPage(() => import('./pages/HseReportsPage'));
+const HseDashboardPage = lazyPage(() => import('./pages/HseDashboardPage'));
+const HseUsersPage = lazyPage(() => import('./pages/HseUsersPage'));
+const HseAccidentsPage = lazyPage(() => import('./pages/HseAccidentsPage'));
+const MaterielPage = lazyPage(() => import('./pages/MaterielPage'));
+const AffectationMaterielPage = lazyPage(() => import('./pages/AffectationMaterielPage'));
+const DetailCiternesPage = lazyPage(() => import('./pages/DetailCiternesPage'));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 10_000 } },
@@ -85,6 +86,9 @@ function RequireResponsableHse({ children }: { children: React.ReactNode }) {
   if (user && user.role !== 'responsable_hse' && user.role !== 'superadmin') return <Navigate to={homePath(user) ?? '/'} replace />;
   return <>{children}</>;
 }
+
+// Every page in the background once the app is up: menu clicks stay instant.
+preloadPages();
 
 export default function App() {
   return (

@@ -21,7 +21,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import { api, apiErrorMessage, downloadFile, uploadErrorMessage } from '../api/client';
+import { api, apiErrorMessage, downloadFile, uploadErrorMessage, isQueuedOffline } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
 import { useAuth } from '../contexts/AuthContext';
 import { SearchInput } from '../components/ui/SearchInput';
@@ -1027,8 +1027,9 @@ function DeliveryForm({
 
   const save = useMutation({
     mutationFn: () => api.post(delivery ? `/entrees/${delivery.id}` : '/entrees', buildBody()),
-    onSuccess: () => {
-      toast.success(delivery ? 'Livraison modifiée' : 'Livraison enregistrée');
+    onSuccess: (res) => {
+      // Offline: the "saved on the device" toast (api/client.ts) says it already.
+      if (!isQueuedOffline(res)) toast.success(delivery ? 'Livraison modifiée' : 'Livraison enregistrée');
       queryClient.invalidateQueries({ queryKey: ['entrees'] });
       queryClient.invalidateQueries({ queryKey: ['fuel'] });
       onClose();
@@ -1049,12 +1050,7 @@ function DeliveryForm({
 
   const submit = () => {
     if (missing.length) return toast.error(`Il manque ${missing.join(', ')}.`);
-    if (!navigator.onLine) {
-      api.post(delivery ? `/entrees/${delivery.id}` : '/entrees', buildBody()).catch(() => undefined);
-      toast('Pas de réseau : la livraison sera envoyée toute seule dès le retour du réseau.', { icon: '📶', duration: 7000 });
-      onClose();
-      return;
-    }
+    // No network: the service worker keeps it and the mutation succeeds as "queued".
     save.mutate();
   };
 
