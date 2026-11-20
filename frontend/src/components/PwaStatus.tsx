@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { registerSW } from 'virtual:pwa-register';
 import toast from 'react-hot-toast';
 import { useQueryClient } from '@tanstack/react-query';
-import { WifiOff, DownloadCloud, RefreshCw, CloudUpload } from 'lucide-react';
+import { DownloadCloud, RefreshCw, Sparkles } from 'lucide-react';
 import {
   askServiceWorker,
   checkConnectivity,
@@ -32,8 +32,6 @@ type SyncFailure = { method: string; url: string; status?: number; message: stri
  */
 export function PwaStatus() {
   const queryClient = useQueryClient();
-  const [conn, setConn] = useState(getConnectivity);
-  const isOffline = !conn.online;
   const [needRefresh, setNeedRefresh] = useState(false);
   const updateSWRef = useRef<((reloadPage?: boolean) => Promise<void>) | null>(null);
 
@@ -83,7 +81,13 @@ export function PwaStatus() {
     // (see utils/connectivity.ts). The browser's events only trigger it.
     let wasOnline = getConnectivity().online;
     const unsubscribe = subscribeConnectivity((next) => {
-      setConn(next);
+      if (!next.online && wasOnline) {
+        toast('Mode hors connexion : vous pouvez continuer à travailler, tout sera envoyé au retour du réseau.', {
+          id: 'offline',
+          icon: '📶',
+          duration: 4000,
+        });
+      }
       if (next.online && !wasOnline) {
         // Back online: refetch what was shown from the offline copy.
         queryClient.invalidateQueries();
@@ -177,42 +181,30 @@ export function PwaStatus() {
     }, 2000);
   }
 
-  const syncing = !isOffline && conn.queued > 0;
-  const pending = conn.queued === 1 ? '1 action en attente d’envoi' : `${conn.queued} actions en attente d’envoi`;
-
-  if (!isOffline && !needRefresh && !syncing) return null;
+  // Connection state is the chip in the top bar (ConnectionStatus) — never a
+  // bar over the navigation. Only the update offer is drawn here: a
+  // persistent floating card (not a toast, so it can't be missed).
+  if (!needRefresh) return null;
 
   return (
-    <>
-      {isOffline && (
-        <div className="fixed inset-x-0 top-0 z-[60] flex items-center justify-center gap-2 bg-amber-500 safe-px pb-1.5 pt-[max(0.375rem,env(safe-area-inset-top))] text-center text-xs font-medium text-white shadow">
-          <WifiOff size={13} className="shrink-0" />
-          <span>
-            Hors connexion — vous consultez les dernières données enregistrées, vos actions seront envoyées au retour du réseau.
-            {conn.queued > 0 && <strong className="ml-1">({pending})</strong>}
-          </span>
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex justify-center safe-px pb-[calc(1rem+env(safe-area-inset-bottom))]">
+      <div className="animate-notif-in pointer-events-auto flex w-full max-w-md items-center gap-3 rounded-2xl border border-slate-200 bg-white/95 p-3 pl-4 shadow-xl shadow-slate-900/15 backdrop-blur dark:border-slate-700 dark:bg-slate-900/95 dark:shadow-black/50">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-600 dark:bg-sky-500/15 dark:text-sky-400">
+          <Sparkles size={18} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">Nouvelle version disponible</div>
+          <div className="truncate text-xs text-slate-500 dark:text-slate-400">Rechargez pour profiter des nouveautés.</div>
         </div>
-      )}
-      {syncing && (
-        <div className="fixed inset-x-0 top-0 z-[60] flex items-center justify-center gap-2 bg-sky-600 safe-px pb-1.5 pt-[max(0.375rem,env(safe-area-inset-top))] text-center text-xs font-medium text-white shadow">
-          <CloudUpload size={13} className="shrink-0 animate-pulse" />
-          Envoi des actions faites hors connexion… ({pending})
-        </div>
-      )}
-      {needRefresh && (
-        <div className="fixed inset-x-0 bottom-0 z-[60] flex flex-wrap items-center justify-center gap-3 border-t border-sky-300/20 bg-sky-500/10 safe-px pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] text-sm font-medium text-white shadow-lg backdrop-blur-sm">
-          <RefreshCw size={16} className="shrink-0 text-sky-300" />
-          <span>Une nouvelle version est disponible.</span>
-          <button
-            type="button"
-            onClick={reloadForUpdate}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-b from-sky-500 to-blue-600 px-4 py-1.5 text-xs font-semibold text-white shadow-md shadow-blue-950/40 ring-1 ring-inset ring-white/10 transition-colors hover:from-sky-400 hover:to-blue-500"
-          >
-            <RefreshCw size={13} />
-            Recharger
-          </button>
-        </div>
-      )}
-    </>
+        <button
+          type="button"
+          onClick={reloadForUpdate}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-sky-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-500 active:bg-sky-700"
+        >
+          <RefreshCw size={14} />
+          Recharger
+        </button>
+      </div>
+    </div>
   );
 }

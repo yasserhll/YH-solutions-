@@ -126,6 +126,19 @@ async function messageOf(response) {
   return `Erreur ${response.status}`;
 }
 
+/**
+ * Did this answer really come from the Laravel API? A proxy's 502/503/504
+ * (backend down) or a Wi-Fi login page answering 200 HTML are "no server",
+ * exactly like no network: they must never be cached, shown as data, or
+ * make a queued write look sent.
+ */
+function fromApi(response) {
+  if ([502, 503, 504].includes(response.status)) return false;
+  if (response.status === 204 || response.status === 304) return true;
+  const type = response.headers.get('Content-Type') || '';
+  return type.includes('json') || type.includes('spreadsheet') || type.includes('pdf') || type.includes('octet-stream') || type.startsWith('image/');
+}
+
 /* -------------------------------------------------------------------- reads */
 
 const CACHE_MAX_ENTRIES = 400;
@@ -152,6 +165,7 @@ async function networkFirst(request) {
   const key = await cacheKey(request);
 
   const network = fetch(request).then(async (response) => {
+    if (!fromApi(response)) throw new Error('server unreachable');
     if (response.ok) {
       try {
         await cache.put(key, await tagged(response.clone(), { 'X-Cached-At': new Date().toISOString() }));
@@ -177,7 +191,7 @@ async function networkFirst(request) {
   } catch {
     const hit = await cache.match(key);
     if (hit) return tagged(hit, { 'X-From-Cache': '1' });
-    return Response.error();
+    return Response.error(); // the page sees "no network", never an HTML error page as data
   }
 }
 
@@ -191,6 +205,9 @@ async function sendOrQueue(request, path) {
 
   try {
     const response = await fetch(request);
+    // Backend down behind the proxy / Wi-Fi login page: not received.
+    // (A 504 may have been processed: the idempotency key makes the replay safe.)
+    if (!fromApi(response)) throw new Error('server unreachable');
     flushSoon();
     return response;
   } catch (err) {
@@ -268,6 +285,7 @@ async function replayAll() {
     } catch {
       break; // still no network: keep it (and everything after it) for later
     }
+    if (!fromApi(response)) break; // server still unreachable behind the proxy
 
     const retryLater = response.status >= 500 || response.status === 429 || response.status === 409 && response.headers.has('Retry-After');
     if (retryLater) {

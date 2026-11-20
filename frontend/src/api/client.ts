@@ -58,7 +58,9 @@ api.interceptors.response.use(
       else if (error.code !== 'ERR_CANCELED') reportServerUnreachable();
     }
     if (error.response?.status === 401) {
+      // The only thing that ends a session: the server refused the token.
       localStorage.removeItem('token');
+      localStorage.removeItem('me-offline');
       if (!window.location.pathname.startsWith('/login')) {
         window.location.href = '/login';
       }

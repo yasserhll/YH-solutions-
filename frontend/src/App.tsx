@@ -44,8 +44,13 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
   if (isLoading)
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 text-sm text-slate-400 dark:bg-slate-950">
-        Chargement...
+      // Only when this device has no saved copy of the session yet (first
+      // start of this version) and the server can't be reached: the session
+      // is kept and retried every 5 s, never sent back to the login page.
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-3 bg-slate-50 safe-p text-center text-sm text-slate-500 dark:bg-slate-950 dark:text-slate-400">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-300 border-t-transparent dark:border-slate-600 dark:border-t-transparent" />
+        <div>Connexion au serveur…</div>
+        <div className="max-w-xs text-xs text-slate-400 dark:text-slate-500">Votre session est conservée. Si le réseau est coupé, l’application s’ouvrira dès son retour.</div>
       </div>
     );
   if (!user) return <Navigate to="/login" replace />;
@@ -97,7 +102,8 @@ export default function App() {
         <BrowserRouter>
           <AuthProvider>
             <SiteFilterProvider>
-              <Toaster position="top-right" />
+              {/* Below the top bar (and the notch), never over the navigation. */}
+              <Toaster position="top-right" containerStyle={{ top: 'calc(4.5rem + env(safe-area-inset-top))' }} />
               <PwaStatus />
               <Routes>
                 <Route path="/login" element={<LoginPage />} />
