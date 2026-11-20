@@ -23,7 +23,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import { api, apiErrorMessage } from '../api/client';
+import { api, apiErrorMessage, isQueuedOffline } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
 import { useAuth } from '../contexts/AuthContext';
 import type { BonAttachment, BonTank, BonVehicle, FuelBon, FuelBonPage } from '../types';
@@ -815,8 +815,9 @@ function BonForm({
 
   const save = useMutation({
     mutationFn: () => api.post(bon ? `/bons/${bon.id}` : '/bons', buildBody()),
-    onSuccess: () => {
-      toast.success(bon ? 'Bon modifié' : 'Bon enregistré');
+    onSuccess: (res) => {
+      // Offline: the "saved on the device" toast (api/client.ts) says it already.
+      if (!isQueuedOffline(res)) toast.success(bon ? 'Bon modifié' : 'Bon enregistré');
       queryClient.invalidateQueries({ queryKey: ['bons'] });
       queryClient.invalidateQueries({ queryKey: ['fuel'] });
       onClose();
@@ -835,13 +836,7 @@ function BonForm({
   const submit = () => {
     if (missing.length) return toast.error(`Il manque ${missing.join(', ')}.`);
     if (litresMismatch || endBeforeStart) return toast.error('Les litres ne correspondent pas aux séries.');
-    if (!navigator.onLine) {
-      // The PWA keeps the request and sends it when the network is back.
-      api.post(bon ? `/bons/${bon.id}` : '/bons', buildBody()).catch(() => undefined);
-      toast('Pas de réseau : le bon sera envoyé tout seul dès le retour du réseau. Vérifiez-le ensuite dans la liste.', { icon: '📶', duration: 7000 });
-      onClose();
-      return;
-    }
+    // No network: the service worker keeps it and the mutation succeeds as "queued".
     save.mutate();
   };
 

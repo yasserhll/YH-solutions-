@@ -2,6 +2,15 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import { defineConfig } from 'vite'
+import { readFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+
+// The service worker's imported scripts are fetched through the browser's
+// HTTP cache (updateViaCache 'imports' is the default): a changed
+// offline-sw.js / push-sw.js at the same URL could be served stale for a
+// day. A content hash in the URL makes every change a new file.
+const versioned = (file: string) =>
+  `/${file}?v=${createHash('sha256').update(readFileSync(new URL(`./public/${file}`, import.meta.url))).digest('hex').slice(0, 10)}`
 
 export default defineConfig({
   plugins: [
@@ -49,7 +58,8 @@ export default defineConfig({
       workbox: {
         // Device notifications (Web Push): `push` / `notificationclick`
         // handlers live in public/push-sw.js (see usePushNotifications).
-        importScripts: ['/push-sw.js'],
+        // Offline API layer (cache + write queue): public/offline-sw.js.
+        importScripts: [versioned('push-sw.js'), versioned('offline-sw.js')],
         cleanupOutdatedCaches: true,
         clientsClaim: true,
         navigateFallback: '/index.html',
@@ -57,86 +67,11 @@ export default defineConfig({
         // otherwise a stale "logged in" state could survive a token
         // revocation while offline.
         navigateFallbackDenylist: [/^\/api\//],
-        runtimeCaching: [
-          {
-            // Identity must never be cached by the service worker either —
-            // the backend sends Cache-Control: no-store on every /api/*
-            // response (stops the *browser's* HTTP cache), but Workbox's
-            // own Cache Storage ignores that header and would cache this
-            // by URL regardless. Without this exclusion, one account's
-            // identity could still be served to a *different* account from
-            // the offline fallback after a login switch on the same
-            // browser. Must be registered before the general GET rule below
-            // (first match wins).
-            urlPattern: ({ url, request }) => request.method === 'GET' && url.pathname === '/api/me',
-            handler: 'NetworkOnly',
-          },
-          {
-            // Every GET goes to the network first — this app is edited
-            // constantly (mark present/absent, add a leave, etc.) and a
-            // refetch right after a mutation must show the new value, not a
-            // stale cached one (StaleWhileRevalidate would return the old
-            // snapshot immediately and only update the cache for *next*
-            // time, which looked like "nothing happened until I refresh").
-            // The cache is only a fallback for when the network genuinely
-            // fails — i.e. actually offline — which is what this is for.
-            urlPattern: ({ url, request }) => request.method === 'GET' && url.pathname.startsWith('/api/'),
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'api-get-cache',
-              networkTimeoutSeconds: 4,
-              expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 14 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            // Writes made while offline (a declared purchase, a marked
-            // absence, a new leave request...) are queued and replayed
-            // automatically as soon as connectivity returns.
-            urlPattern: ({ url, request }) => request.method !== 'GET' && url.pathname.startsWith('/api/'),
-            handler: 'NetworkOnly',
-            method: 'POST',
-            options: {
-              backgroundSync: {
-                name: 'api-mutations-queue-post',
-                options: { maxRetentionTime: 24 * 60 },
-              },
-            },
-          },
-          {
-            urlPattern: ({ url, request }) => request.method !== 'GET' && url.pathname.startsWith('/api/'),
-            handler: 'NetworkOnly',
-            method: 'PUT',
-            options: {
-              backgroundSync: {
-                name: 'api-mutations-queue-put',
-                options: { maxRetentionTime: 24 * 60 },
-              },
-            },
-          },
-          {
-            urlPattern: ({ url, request }) => request.method !== 'GET' && url.pathname.startsWith('/api/'),
-            handler: 'NetworkOnly',
-            method: 'PATCH',
-            options: {
-              backgroundSync: {
-                name: 'api-mutations-queue-patch',
-                options: { maxRetentionTime: 24 * 60 },
-              },
-            },
-          },
-          {
-            urlPattern: ({ url, request }) => request.method !== 'GET' && url.pathname.startsWith('/api/'),
-            handler: 'NetworkOnly',
-            method: 'DELETE',
-            options: {
-              backgroundSync: {
-                name: 'api-mutations-queue-delete',
-                options: { maxRetentionTime: 24 * 60 },
-              },
-            },
-          },
-        ],
+        // Every /api/* call (network-first reads with an offline copy, writes
+        // queued when there is no network and replayed exactly once) is
+        // handled by public/offline-sw.js — no Workbox runtimeCaching rule
+        // may match /api/ any more, or both would answer the same request.
+        runtimeCaching: [],
       },
     }),
   ],

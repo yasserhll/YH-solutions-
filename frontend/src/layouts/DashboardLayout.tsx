@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -161,7 +161,7 @@ export function DashboardLayout() {
       {/* Fixed, not part of the document flow — never scrolls with the page. */}
       <aside
         className={clsx(
-          'fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 flex-col pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] border-r border-slate-200 dark:border-slate-800 bg-white transition-transform duration-200 dark:bg-slate-900',
+          'fixed inset-y-0 left-0 z-40 flex w-[calc(16rem+env(safe-area-inset-left))] shrink-0 flex-col safe-pb safe-pt safe-pl border-r border-slate-200 dark:border-slate-800 bg-white transition-transform duration-200 dark:bg-slate-900',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
           desktopOpen ? 'lg:translate-x-0' : 'lg:-translate-x-full',
         )}
@@ -274,7 +274,9 @@ export function DashboardLayout() {
       </aside>
 
       <div className={clsx('flex min-h-screen flex-col transition-[margin] duration-200', desktopOpen ? 'lg:ml-64' : 'lg:ml-0')}>
-        <header className="flex h-[calc(4rem+env(safe-area-inset-top))] shrink-0 items-center gap-3 pt-[env(safe-area-inset-top)] border-b border-slate-200 dark:border-slate-800 bg-white px-4 dark:bg-slate-900 lg:px-6">
+        {/* Sticky so the menu / bell / site stay reachable while scrolling;
+            pads the status bar (top) and the landscape notch (sides). */}
+        <header className="sticky top-0 z-20 flex h-[calc(4rem+env(safe-area-inset-top))] shrink-0 items-center gap-3 safe-pt safe-px border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 lg:px-6">
           <button
             className="rounded-md p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
             onClick={toggleSidebar}
@@ -296,8 +298,12 @@ export function DashboardLayout() {
           </div>
         </header>
 
-        <main className="flex-1 p-4 lg:p-6">
-          <Outlet />
+        <main className="flex-1 safe-px pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] lg:p-6 lg:pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+          {/* Pages load in their own file (utils/lazyPage.tsx): only the page
+              area waits on a first visit — sidebar and top bar stay put. */}
+          <Suspense fallback={<PageLoading />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
     </div>
@@ -369,5 +375,13 @@ function SiteSwitcher({ sites }: { sites: Site[] }) {
         )}
       </div>
     </>
+  );
+}
+
+function PageLoading() {
+  return (
+    <div className="flex items-center justify-center py-24 text-slate-400 dark:text-slate-500" role="status" aria-label="Chargement">
+      <div className="h-6 w-6 animate-spin rounded-full border-2 border-current border-t-transparent" />
+    </div>
   );
 }

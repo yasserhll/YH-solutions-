@@ -523,7 +523,8 @@ function AbsenceModal({
       if (cause === 'mise_a_pied') {
         queryClient.invalidateQueries({ queryKey: ['suspensions'] });
         const first = (result as { data: Suspension }[])[0]?.data;
-        if (first) {
+        // (no dates when the request was kept offline: generic message below)
+        if (first?.start_date) {
           const fmt = (d: string) => new Date(d).toLocaleDateString('fr-FR');
           toast.success(`Mise à pied enregistrée du ${fmt(first.start_date)} au ${fmt(first.end_date)}.`);
           onSaved();

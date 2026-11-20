@@ -15,7 +15,7 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 sm:items-center"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-slate-900/40 safe-p sm:items-center"
       onClick={onClose}
     >
       <div
@@ -31,12 +31,14 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
           <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
           <button
             onClick={onClose}
-            className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+            aria-label="Fermer"
+            className="-m-1.5 rounded-md p-2.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
           >
             <X size={18} />
           </button>
         </div>
-        <div className="max-h-[75vh] overflow-y-auto px-5 py-4">{children}</div>
+        {/* dvh, not vh: on iPhone 100vh includes the area under the toolbars. */}
+        <div className="max-h-[75dvh] overflow-y-auto px-5 py-4">{children}</div>
       </div>
     </div>
   );

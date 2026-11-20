@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { disablePushOnThisDevice } from '../hooks/usePushNotifications';
+import { askServiceWorker } from '../utils/connectivity';
 import type { AuthUser } from '../types';
 
 interface AuthContextValue {
@@ -12,6 +13,35 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+// The signed-in identity, kept for opening the app offline. Stored with its
+// token so a copy can never be used for another session.
+const USER_KEY = 'me-offline';
+
+function rememberUser(token: string, user: AuthUser) {
+  try {
+    localStorage.setItem(USER_KEY, JSON.stringify({ token, user }));
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+function rememberedUser(token: string): AuthUser | null {
+  try {
+    const saved = JSON.parse(localStorage.getItem(USER_KEY) ?? 'null') as { token: string; user: AuthUser } | null;
+    return saved && saved.token === token ? saved.user : null;
+  } catch {
+    return null;
+  }
+}
+
+function forgetUser() {
+  try {
+    localStorage.removeItem(USER_KEY);
+  } catch {
+    /* ignore */
+  }
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -26,8 +56,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     api
       .get<AuthUser>('/me')
-      .then((res) => setUser(res.data))
-      .catch(() => localStorage.removeItem('token'))
+      .then((res) => {
+        setUser(res.data);
+        rememberUser(token, res.data);
+      })
+      .catch((error) => {
+        // Opening the app without network must NOT log out (it used to: the
+        // token was dropped on any /me failure, so the offline mode was
+        // unusable). Only a real 401 ends the session — the axios
+        // interceptor removes the token then. No answer at all: this
+        // session's last known identity, saved on this device.
+        if (error?.response) return;
+        const saved = rememberedUser(token);
+        if (saved) setUser(saved);
+      })
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -41,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // this is the in-memory React Query cache, a separate layer.
     queryClient.clear();
     localStorage.setItem('token', res.data.token);
+    rememberUser(res.data.token, res.data.user);
     setUser(res.data.user);
   }
 
@@ -51,6 +94,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await api.post('/logout');
     } finally {
       localStorage.removeItem('token');
+      forgetUser();
+      // This account's offline copies leave the device too.
+      askServiceWorker('clear-api-cache');
       setUser(null);
       queryClient.clear();
     }

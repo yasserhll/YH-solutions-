@@ -42,6 +42,10 @@ use Illuminate\Support\Facades\Route;
 
 Route::post('/login', [AuthController::class, 'login']);
 
+// Connectivity check (PwaStatus): "is the server reachable right now?",
+// never answered from the service worker's cache.
+Route::get('/ping', fn () => response()->json(['ok' => true]));
+
 // Web Push: the public key is public by nature; `renew` is called by the
 // service worker, which has no token (authorized by the old endpoint).
 Route::get('/push/key', [PushSubscriptionController::class, 'key']);

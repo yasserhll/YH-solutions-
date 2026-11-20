@@ -22,6 +22,8 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
         $middleware->api(append: [
             \App\Http\Middleware\PreventApiCaching::class,
+            // A write replayed by the offline queue (or double-sent) runs once.
+            \App\Http\Middleware\EnsureIdempotentWrites::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

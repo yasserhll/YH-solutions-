@@ -1,21 +1,62 @@
-import axios from 'axios';
+import axios, { type AxiosResponse } from 'axios';
+import toast from 'react-hot-toast';
+import { reportServerReached, reportServerUnreachable, setQueuedCount, getConnectivity } from '../utils/connectivity';
 
 export const api = axios.create({
   baseURL: '/api',
   headers: { Accept: 'application/json' },
 });
 
+function newIdempotencyKey(): string {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  // crypto.randomUUID needs HTTPS; plain-http LAN access still gets a unique key.
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  // Every write gets its own key: the offline queue replays it with that
+  // key, and the server (EnsureIdempotentWrites) runs it only once, however
+  // many copies arrive.
+  const method = (config.method ?? 'get').toLowerCase();
+  if (method !== 'get' && !config.headers['X-Idempotency-Key']) {
+    config.headers['X-Idempotency-Key'] = newIdempotencyKey();
+  }
   return config;
 });
 
+/** True when the service worker kept the write on the device (no network). */
+export function isQueuedOffline(response: AxiosResponse | undefined): boolean {
+  return !!response?.headers?.['x-offline-queued'];
+}
+
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    if (isQueuedOffline(response)) {
+      setQueuedCount(getConnectivity().queued + 1);
+      reportServerUnreachable();
+      toast('Pas de réseau : c’est enregistré sur l’appareil et sera envoyé tout seul au retour du réseau.', {
+        id: 'offline-queued',
+        icon: '📶',
+        duration: 6000,
+      });
+    } else if (response.headers?.['x-from-cache']) {
+      reportServerUnreachable();
+    } else {
+      reportServerReached();
+    }
+    return response;
+  },
   (error) => {
+    if (axios.isAxiosError(error)) {
+      if (error.response) reportServerReached();
+      else if (error.code !== 'ERR_CANCELED') reportServerUnreachable();
+    }
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
       if (!window.location.pathname.startsWith('/login')) {
@@ -50,6 +91,8 @@ export function apiErrorMessage(error: unknown, fallback = 'Une erreur est surve
       return Object.values(data.errors).flat().join(' ');
     }
     if (data?.message) return data.message;
+    if (!error.response && error.code !== 'ERR_CANCELED')
+      return 'Le serveur ne répond pas. Vérifiez la connexion puis réessayez.';
   }
   return fallback;
 }
