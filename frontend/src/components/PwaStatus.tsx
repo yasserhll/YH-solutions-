@@ -13,6 +13,31 @@ import {
 
 type SyncFailure = { method: string; url: string; status?: number; message: string };
 
+/** Id of the build this page runs (vite.config.ts `define`); the deployed one is in /version.json. */
+declare const __BUILD_ID__: string;
+
+/**
+ * How often an open app asks the server which build is deployed. One tiny
+ * no-cache request (answered 304 almost always). The user's rule (2026-11-20):
+ * a deploy must show RECHARGER to everyone at once — browser, desktop PWA,
+ * Android, iPhone — so this is seconds, never minutes. A hidden / suspended
+ * app (iPhone in the background) can't run code: it checks the instant it
+ * comes back to the foreground.
+ */
+const VERSION_POLL_MS = 5_000;
+
+/** Resolves once the registration has a waiting (installed) worker, or after `timeoutMs`. */
+function waitForWaitingWorker(registration: ServiceWorkerRegistration, timeoutMs: number): Promise<void> {
+  const end = Date.now() + timeoutMs;
+  return new Promise((resolve) => {
+    const tick = () => {
+      if (registration.waiting || Date.now() > end) return resolve();
+      setTimeout(tick, 200);
+    };
+    tick();
+  });
+}
+
 /**
  * Registers the service worker and surfaces the things a user actually needs
  * to know about a PWA: "you're offline, your changes will sync later" and
@@ -77,6 +102,43 @@ export function PwaStatus() {
     });
     updateSWRef.current = updateSW;
 
+    // Instant update offer: the server's /version.json names the deployed
+    // build. As soon as it differs from this page's build, show RECHARGER
+    // (the new service worker is fetched in the background meanwhile;
+    // reloadForUpdate waits for it). Independent of the service worker, so it
+    // also works where none can register (some in-app browsers).
+    let versionCheckRunning = false;
+    const checkDeployedVersion = async () => {
+      if (import.meta.env.DEV || versionCheckRunning || document.visibilityState !== 'visible') return;
+      versionCheckRunning = true;
+      try {
+        const res = await fetch(`/version.json?t=${Date.now()}`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const { build } = (await res.json()) as { build?: string };
+        if (build && build !== __BUILD_ID__) {
+          setNeedRefresh(true);
+          navigator.serviceWorker
+            ?.getRegistration()
+            .then((registration) => registration?.update())
+            .catch(() => undefined);
+        }
+      } catch {
+        /* no network: checked again on the next tick / when it comes back */
+      } finally {
+        versionCheckRunning = false;
+      }
+    };
+    void checkDeployedVersion();
+    const versionTimer = window.setInterval(checkDeployedVersion, VERSION_POLL_MS);
+    const onVersionVisible = () => {
+      if (document.visibilityState === 'visible') void checkDeployedVersion();
+    };
+    document.addEventListener('visibilitychange', onVersionVisible);
+    window.addEventListener('focus', checkDeployedVersion);
+    window.addEventListener('online', checkDeployedVersion);
+    // iOS restores a PWA from its page cache without a reload: check then too.
+    window.addEventListener('pageshow', checkDeployedVersion);
+
     // Connectivity: a real check of the server, not navigator.onLine alone
     // (see utils/connectivity.ts). The browser's events only trigger it.
     let wasOnline = getConnectivity().online;
@@ -138,6 +200,11 @@ export function PwaStatus() {
       window.removeEventListener('online', check);
       document.removeEventListener('visibilitychange', onVisible);
       navigator.serviceWorker?.removeEventListener('message', onSwMessage);
+      window.clearInterval(versionTimer);
+      document.removeEventListener('visibilitychange', onVersionVisible);
+      window.removeEventListener('focus', checkDeployedVersion);
+      window.removeEventListener('online', checkDeployedVersion);
+      window.removeEventListener('pageshow', checkDeployedVersion);
     };
   }, []);
 
@@ -158,6 +225,15 @@ export function PwaStatus() {
     // reload once 'controllerchange' confirms it actually took control.
     navigator.serviceWorker?.addEventListener('controllerchange', hardReload, { once: true });
     const registration = await navigator.serviceWorker?.getRegistration();
+    // The banner now appears as soon as /version.json changes, possibly
+    // before the new service worker has finished downloading: wait for it
+    // (a few seconds at most), so the switch takes the proper path below
+    // rather than the unregister fallback.
+    if (registration && !registration.waiting) {
+      toast.loading('Mise à jour en cours…', { id: 'sw-update' });
+      registration.update().catch(() => undefined);
+      await waitForWaitingWorker(registration, 20_000);
+    }
     registration?.waiting?.postMessage({ type: 'SKIP_WAITING' });
     updateSWRef.current?.(true);
 

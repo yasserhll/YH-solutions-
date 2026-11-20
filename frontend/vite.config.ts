@@ -12,8 +12,26 @@ import { createHash } from 'node:crypto'
 const versioned = (file: string) =>
   `/${file}?v=${createHash('sha256').update(readFileSync(new URL(`./public/${file}`, import.meta.url))).digest('hex').slice(0, 10)}`
 
+// One id per build. The running app knows its own (`__BUILD_ID__`) and the
+// server publishes the deployed one in /version.json (served `no-cache` by
+// nginx, never precached, never touched by the service worker): PwaStatus
+// compares the two every few seconds and shows RECHARGER the moment a new
+// build is on the server — without waiting for the browser's own (slower)
+// service-worker update check.
+const BUILD_ID = `${Date.now().toString(36)}-${createHash('sha256').update(String(Math.random())).digest('hex').slice(0, 6)}`
+
 export default defineConfig({
+  define: {
+    __BUILD_ID__: JSON.stringify(BUILD_ID),
+  },
   plugins: [
+    {
+      name: 'build-version-file',
+      apply: 'build',
+      generateBundle() {
+        this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ build: BUILD_ID }) })
+      },
+    },
     react(),
     tailwindcss(),
     VitePWA({
