@@ -29,6 +29,7 @@ use App\Http\Controllers\Api\HseReportController;
 use App\Http\Controllers\Api\HseUserController;
 use App\Http\Controllers\Api\IllnessController;
 use App\Http\Controllers\Api\LeaveController;
+use App\Http\Controllers\Api\LeaveHistoryController;
 use App\Http\Controllers\Api\LeaveRequestController;
 use App\Http\Controllers\Api\OvertimeEntryController;
 use App\Http\Controllers\Api\OvertimeMonthController;
@@ -117,6 +118,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('module:conges')->group(function () {
         Route::patch('/leave-requests/{leaveRequest}/status', [LeaveRequestController::class, 'updateStatus']);
         Route::apiResource('leave-requests', LeaveRequestController::class)->except(['show']);
+        Route::get('/leave-history', [LeaveHistoryController::class, 'index']);
+        Route::post('/leave-history/import', [LeaveHistoryController::class, 'import']);
         Route::post('/leaves/{leave}/extensions', [LeaveController::class, 'extend']);
         Route::apiResource('leaves', LeaveController::class)->except(['show'])->parameters(['leaves' => 'leave']);
 

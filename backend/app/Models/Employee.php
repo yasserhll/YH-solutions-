@@ -82,6 +82,11 @@ class Employee extends Model
         return $this->hasMany(LeaveRequest::class);
     }
 
+    public function leaveHistory(): HasMany
+    {
+        return $this->hasMany(LeaveHistory::class);
+    }
+
     public function leaves(): HasMany
     {
         return $this->hasMany(Leave::class);

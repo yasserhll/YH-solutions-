@@ -18,8 +18,9 @@ import { Modal } from '../components/ui/Modal';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { TextAreaField, TextField } from '../components/ui/Field';
 import { EmployeeSelect } from '../components/ui/EmployeeSelect';
+import { LeaveHistoryTab } from './LeaveHistoryTab';
 
-const tabs = ['Demandes', 'Congés en cours'] as const;
+const tabs = ['Demandes', 'Congés en cours', 'Historique & soldes'] as const;
 
 export default function LeavesPage() {
   const [tab, setTab] = useUrlTab(tabs, 'Demandes');
@@ -176,17 +177,17 @@ export default function LeavesPage() {
     <div>
       <PageHeader
         title="Congés"
-        description="Demandes de congé et suivi des congés en cours"
+        description="Demandes de congé, congés en cours, historique et soldes"
         actions={
           tab === 'Demandes' ? (
             <Button onClick={() => setShowRequestForm(true)}>
               <Plus size={16} /> Nouvelle demande
             </Button>
-          ) : (
+          ) : tab === 'Congés en cours' ? (
             <Button onClick={() => setShowLeaveForm(true)}>
               <Plus size={16} /> Déclarer un départ en congé
             </Button>
-          )
+          ) : undefined
         }
       />
 
@@ -272,6 +273,8 @@ export default function LeavesPage() {
             />
           )}
         </div>
+      ) : tab === 'Historique & soldes' ? (
+        <LeaveHistoryTab search={search} siteParams={siteParams} />
       ) : (
         <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
           <DataTable columns={leaveColumns} rows={leavesQuery.data?.data ?? []} isLoading={leavesQuery.isLoading} keyFn={(l) => l.id} />
