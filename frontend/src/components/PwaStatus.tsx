@@ -39,6 +39,48 @@ function waitForWaitingWorker(registration: ServiceWorkerRegistration, timeoutMs
 }
 
 /**
+ * RECHARGER is offered ONCE per deployed build (the user's rule, 2026-11-24):
+ * once clicked it must not come back for that same build — not while the new
+ * worker downloads, not after the reload. sessionStorage survives the reload.
+ */
+const APPLIED_KEY = 'update-applied-build';
+const RETRIED_KEY = 'update-retried-build';
+function readSession(key: string): string | null {
+  try {
+    return sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function writeSession(key: string, value: string | null) {
+  try {
+    if (value === null) sessionStorage.removeItem(key);
+    else sessionStorage.setItem(key, value);
+  } catch {
+    /* private mode: worst case the banner may be offered again */
+  }
+}
+
+/** The build deployed on the server right now, or null when it can't be known (offline…). */
+async function deployedBuild(): Promise<string | null> {
+  try {
+    const res = await fetch(`/version.json?t=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) return null;
+    const { build } = (await res.json()) as { build?: string };
+    return build || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Removes the service worker and reloads from the network: always lands on the deployed build. */
+async function unregisterAndReload() {
+  const registrations = await navigator.serviceWorker?.getRegistrations();
+  await Promise.all((registrations ?? []).map((r) => r.unregister()));
+  window.location.reload();
+}
+
+/**
  * Registers the service worker and surfaces the things a user actually needs
  * to know about a PWA: "you're offline, your changes will sync later" and
  * "a new version is ready". Mount once, near the root.
@@ -59,12 +101,43 @@ export function PwaStatus() {
   const queryClient = useQueryClient();
   const [needRefresh, setNeedRefresh] = useState(false);
   const updateSWRef = useRef<((reloadPage?: boolean) => Promise<void>) | null>(null);
+  // Set the moment RECHARGER is clicked: nothing may show the banner again on this page.
+  const updatingRef = useRef(false);
+  // The deployed build the banner is offering (null: only the SW knows of an update).
+  const offeredBuildRef = useRef<string | null>(null);
 
   useEffect(() => {
+    /**
+     * Shows RECHARGER for `build`, unless it was already clicked for that
+     * build. If it was, and the page still runs the old build after the
+     * reload (an old worker served its stale copy), finish the update
+     * silently once instead of asking again. Returns whether it was shown.
+     */
+    function offerUpdate(build: string | null): boolean {
+      if (updatingRef.current) return false;
+      if (build && readSession(APPLIED_KEY) === build) {
+        if (readSession(RETRIED_KEY) !== build) {
+          writeSession(RETRIED_KEY, build);
+          updatingRef.current = true;
+          void unregisterAndReload();
+        }
+        return false;
+      }
+      offeredBuildRef.current = build;
+      setNeedRefresh(true);
+      return true;
+    }
+
     const updateSW = registerSW({
       immediate: true,
       onNeedRefresh() {
-        setNeedRefresh(true);
+        void (async () => {
+          const build = await deployedBuild();
+          // This page already runs the deployed build (e.g. just reloaded):
+          // nothing to offer — the waiting worker takes over on its own later.
+          if (build === __BUILD_ID__) return;
+          offerUpdate(build);
+        })();
       },
       onOfflineReady() {
         toast.success('Application prête pour un usage hors connexion.', {
@@ -109,21 +182,23 @@ export function PwaStatus() {
     // also works where none can register (some in-app browsers).
     let versionCheckRunning = false;
     const checkDeployedVersion = async () => {
-      if (import.meta.env.DEV || versionCheckRunning || document.visibilityState !== 'visible') return;
+      if (import.meta.env.DEV || versionCheckRunning || updatingRef.current || document.visibilityState !== 'visible') return;
       versionCheckRunning = true;
       try {
-        const res = await fetch(`/version.json?t=${Date.now()}`, { cache: 'no-store' });
-        if (!res.ok) return;
-        const { build } = (await res.json()) as { build?: string };
-        if (build && build !== __BUILD_ID__) {
-          setNeedRefresh(true);
+        const build = await deployedBuild();
+        if (!build) return; // no network: checked again on the next tick / when it comes back
+        if (build === __BUILD_ID__) {
+          // Running the deployed build: the update (if any) is done.
+          writeSession(APPLIED_KEY, null);
+          writeSession(RETRIED_KEY, null);
+          return;
+        }
+        if (offerUpdate(build)) {
           navigator.serviceWorker
             ?.getRegistration()
             .then((registration) => registration?.update())
             .catch(() => undefined);
         }
-      } catch {
-        /* no network: checked again on the next tick / when it comes back */
       } finally {
         versionCheckRunning = false;
       }
@@ -212,6 +287,10 @@ export function PwaStatus() {
     // Hide the banner the instant the button is clicked — it should never
     // look like the click did nothing, whatever happens next.
     setNeedRefresh(false);
+    // …and never again for this build: not during the download, not after the reload.
+    updatingRef.current = true;
+    const build = offeredBuildRef.current ?? (await deployedBuild());
+    if (build) writeSession(APPLIED_KEY, build);
 
     let reloaded = false;
     const hardReload = () => {
@@ -251,9 +330,8 @@ export function PwaStatus() {
     // again on that load, same as any first visit).
     setTimeout(async () => {
       if (reloaded) return;
-      const registrations = await navigator.serviceWorker?.getRegistrations();
-      await Promise.all((registrations ?? []).map((r) => r.unregister()));
-      hardReload();
+      reloaded = true;
+      await unregisterAndReload();
     }, 2000);
   }
 
