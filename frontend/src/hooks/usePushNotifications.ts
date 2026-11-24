@@ -59,6 +59,16 @@ function payload(sub: PushSubscription) {
  * The service worker reads this endpoint back when the browser renews the
  * subscription (`pushsubscriptionchange` in public/push-sw.js).
  */
+/** The endpoint this device last had, or null after a logout / turning it off. */
+async function storedEndpoint(): Promise<string | null> {
+  try {
+    const res = await (await caches.open('push-meta')).match('/__push-endpoint');
+    return res ? await res.text() : null;
+  } catch {
+    return null;
+  }
+}
+
 async function rememberEndpoint(endpoint: string | null) {
   try {
     const cache = await caches.open('push-meta');
@@ -126,6 +136,10 @@ export function syncPushSubscription(): Promise<boolean> {
       await api.post('/push/subscriptions', payload(sub)).catch(() => undefined);
       return true;
     }
+    // Turned on before this flag existed: the endpoint it still remembers
+    // (kept by updates, cleared only by turning off / logout) tells a
+    // subscription lost by an update from one the user turned off.
+    if (want === null && !(await storedEndpoint())) return false;
     // No subscription although the user never turned it off: an update
     // dropped it. Permission is still granted, so subscribe again silently.
     try {
