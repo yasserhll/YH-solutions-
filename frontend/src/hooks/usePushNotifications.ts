@@ -70,18 +70,97 @@ async function rememberEndpoint(endpoint: string | null) {
 }
 
 /**
- * On every app start: if this device has notifications on, make sure the
- * server still has it (and under the account now logged in).
+ * The device's own choice, kept across app updates. A new build can replace
+ * the service worker registration (PwaStatus' unregister fallback), and a
+ * push subscription dies with its registration, so the subscription alone
+ * can't tell "turned off" from "lost by an update". This flag can: only the
+ * user switching the toggle off sets it to 'off'.
  */
-export async function syncPushSubscription() {
-  if (!supported() || Notification.permission !== 'granted') return;
-  const sub = await currentSubscription();
-  if (!sub) return;
-  await rememberEndpoint(sub.endpoint);
-  await api.post('/push/subscriptions', payload(sub)).catch(() => undefined);
+const WANT_KEY = 'push-wanted';
+type Want = 'on' | 'off' | null;
+function wanted(): Want {
+  try {
+    const v = localStorage.getItem(WANT_KEY);
+    return v === 'on' || v === 'off' ? v : null;
+  } catch {
+    return null;
+  }
+}
+function setWanted(v: 'on' | 'off') {
+  try {
+    localStorage.setItem(WANT_KEY, v);
+  } catch {
+    /* private mode: falls back to the subscription's own state */
+  }
 }
 
-/** Turns device notifications off for this browser — used on logout. */
+async function subscribeAndRegister(reg: ServiceWorkerRegistration) {
+  const { data } = await api.get<{ public_key: string }>('/push/key');
+  let sub = await reg.pushManager.getSubscription();
+  // A subscription made with another key (e.g. a reinstalled server) can't be reused.
+  if (sub) await sub.unsubscribe().catch(() => undefined);
+  sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(data.public_key) });
+  await api.post('/push/subscriptions', payload(sub));
+  await rememberEndpoint(sub.endpoint);
+  return sub;
+}
+
+let ensuring: Promise<boolean> | null = null;
+let retryOnTap = false;
+
+/**
+ * On every app start (and after each update): if this device has
+ * notifications on, make sure it still has a subscription — re-subscribing
+ * by itself when an update dropped it — and that the server has it under
+ * the account now logged in. Returns whether notifications are on.
+ */
+export function syncPushSubscription(): Promise<boolean> {
+  ensuring ??= (async () => {
+    if (!supported() || Notification.permission !== 'granted') return false;
+    const want = wanted();
+    if (want === 'off') return false;
+    const sub = await currentSubscription();
+    if (sub) {
+      if (want === null) setWanted('on'); // turned on before this flag existed
+      await rememberEndpoint(sub.endpoint);
+      await api.post('/push/subscriptions', payload(sub)).catch(() => undefined);
+      return true;
+    }
+    // No subscription although the user never turned it off: an update
+    // dropped it. Permission is still granted, so subscribe again silently.
+    try {
+      await subscribeAndRegister(await registration(15000));
+      setWanted('on');
+      window.dispatchEvent(new Event('push-status-changed'));
+      return true;
+    } catch {
+      // Some browsers (Safari / iOS) only allow subscribing during a tap:
+      // retry on the next one, without asking anything.
+      if (!retryOnTap) {
+        retryOnTap = true;
+        window.addEventListener(
+          'pointerdown',
+          () => {
+            retryOnTap = false;
+            ensuring = null;
+            syncPushSubscription().catch(() => undefined);
+          },
+          { once: true, capture: true },
+        );
+      }
+      return false;
+    }
+  })().finally(() => {
+    ensuring = null;
+  });
+  return ensuring;
+}
+
+/**
+ * Removes this browser's subscription — on logout (the account changes; the
+ * device keeps its "on" choice and re-subscribes for the next account) and
+ * when the user switches the toggle off (which also records "off").
+ */
 export async function disablePushOnThisDevice() {
   const sub = await currentSubscription();
   await rememberEndpoint(null);
@@ -107,12 +186,15 @@ export function usePushNotifications() {
   useEffect(() => {
     if (status === 'unsupported' || status === 'ios-install') return;
     let cancelled = false;
-    currentSubscription().then((sub) => {
-      if (cancelled) return;
-      if (sub && Notification.permission === 'granted') setStatus('on');
-    });
+    const refresh = () =>
+      currentSubscription().then((sub) => {
+        if (!cancelled && sub && Notification.permission === 'granted') setStatus('on');
+      });
+    refresh();
+    window.addEventListener('push-status-changed', refresh);
     return () => {
       cancelled = true;
+      window.removeEventListener('push-status-changed', refresh);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -126,14 +208,8 @@ export function usePushNotifications() {
         setStatus(permission === 'denied' ? 'denied' : 'off');
         return;
       }
-      const reg = await registration();
-      const { data } = await api.get<{ public_key: string }>('/push/key');
-      let sub = await reg.pushManager.getSubscription();
-      // A subscription made with another key (e.g. a reinstalled server) can't be reused.
-      if (sub) await sub.unsubscribe().catch(() => undefined);
-      sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(data.public_key) });
-      await api.post('/push/subscriptions', payload(sub));
-      await rememberEndpoint(sub.endpoint);
+      const sub = await subscribeAndRegister(await registration());
+      setWanted('on');
       setStatus('on');
       // Confirms on the device itself that everything works end to end.
       // (a short pause: a brand-new subscription takes a moment to be known
@@ -153,6 +229,7 @@ export function usePushNotifications() {
     setError(null);
     setBusy(true);
     try {
+      setWanted('off'); // the only thing that turns it off for good
       await disablePushOnThisDevice();
       setStatus('off');
     } catch (e) {
