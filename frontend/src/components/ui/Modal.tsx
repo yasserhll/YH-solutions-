@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import clsx from 'clsx';
+import { useBackClose } from '../../hooks/useBackClose';
 
 interface ModalProps {
   open: boolean;
@@ -11,6 +12,7 @@ interface ModalProps {
 }
 
 export function Modal({ open, onClose, title, children, size = 'md' }: ModalProps) {
+  useBackClose(open, onClose);
   if (!open) return null;
 
   return (

@@ -1,15 +1,16 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { CloudOff, Loader2 } from 'lucide-react';
 import axios from 'axios';
 import { useConnectivity } from '../components/ConnectionStatus';
 import { useAuth } from '../contexts/AuthContext';
 import { apiErrorMessage } from '../api/client';
 import { Brand } from '../components/ui/Brand';
+import { homePath } from '../utils/modules';
 import { TextField } from '../components/ui/Field';
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, user } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -23,7 +24,9 @@ export default function LoginPage() {
     setIsLoading(true);
     try {
       await login(email, password);
-      navigate('/');
+      // replace: the login page must not stay behind the app in the history,
+      // or the phone's Back button would bring it back as if logged out.
+      navigate('/', { replace: true });
     } catch (err) {
       // No answer: say it plainly, it's not a wrong password.
       setError(
@@ -35,6 +38,9 @@ export default function LoginPage() {
       setIsLoading(false);
     }
   }
+
+  // Already logged in (e.g. Back reached an old /login entry): straight back into the app.
+  if (user) return <Navigate to={homePath(user) ?? '/'} replace />;
 
   return (
     <div className="flex min-h-dvh items-center justify-center bg-slate-100 safe-p dark:bg-slate-950">

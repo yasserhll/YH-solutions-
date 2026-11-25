@@ -44,6 +44,7 @@ import { api } from '../api/client';
 import type { AuthUser, ModuleKey, Site } from '../types';
 import { hasModule, isHseRole } from '../utils/modules';
 import { Brand } from '../components/ui/Brand';
+import { useBackClose } from '../hooks/useBackClose';
 
 function dropdownOptionClass(active: boolean) {
   return clsx(
@@ -150,6 +151,9 @@ export function DashboardLayout() {
   // just restricted to their own assigned sites instead of every site.
   const filterableSites = isSuperAdmin ? (allSites ?? []) : (user?.sites ?? []);
 
+  // Back closes the phone drawer (only below lg, where it is an overlay).
+  useBackClose(mobileOpen && !!window.matchMedia?.('(max-width: 1023px)').matches, () => setMobileOpen(false));
+
   function toggleSidebar() {
     setMobileOpen((o) => !o);
     setDesktopOpen((o) => !o);
@@ -187,6 +191,7 @@ export function DashboardLayout() {
               key={item.to}
               to={item.to}
               end={item.end}
+              replace={mobileOpen}
               onClick={() => setMobileOpen(false)}
               className={({ isActive }) =>
                 clsx(
@@ -220,6 +225,7 @@ export function DashboardLayout() {
                     <NavLink
                       key={item.to}
                       to={item.to}
+                      replace={mobileOpen}
                       onClick={() => setMobileOpen(false)}
                       className={({ isActive }) =>
                         clsx(

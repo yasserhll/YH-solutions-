@@ -28,6 +28,7 @@ import { api, apiErrorMessage, isQueuedOffline } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
 import { useAuth } from '../contexts/AuthContext';
 import { useIsPhone } from '../hooks/useIsPhone';
+import { useBackClose } from '../hooks/useBackClose';
 import { Button } from '../components/ui/Button';
 import type { BonAttachment, BonTank, BonVehicle, FuelBon, FuelBonPage } from '../types';
 import { SearchInput } from '../components/ui/SearchInput';
@@ -570,6 +571,7 @@ function AttachmentsModal({ bon, onClose }: { bon: FuelBon; onClose: () => void 
 
 /** Full screen on a phone, a centred panel on a computer; the save button always visible at the bottom. */
 export function Sheet({ title, onClose, children, footer }: { title: string; onClose: () => void; children: ReactNode; footer: ReactNode }) {
+  useBackClose(true, onClose);
   useEffect(() => {
     const previous = document.body.style.overflow;
     document.body.style.overflow = 'hidden';

@@ -6,6 +6,7 @@ import clsx from 'clsx';
 import { api } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { useSiteParams } from '../hooks/useSiteParams';
+import { useBackClose } from '../hooks/useBackClose';
 import { syncPushSubscription, usePushNotifications, type PushStatus } from '../hooks/usePushNotifications';
 import { hasModule } from '../utils/modules';
 import type { Contract, ContractSummary, EmployeeDocument, EmployeeDocumentSummary, IdDocumentKind, Paginated } from '../types';
@@ -227,6 +228,7 @@ export function ContractNotifications({ autoOpen }: { autoOpen: boolean }) {
     setOpen(false);
     if (signature) writeSeen(signature);
   }
+  useBackClose(open, close);
 
   if (!enabled) return null;
 
