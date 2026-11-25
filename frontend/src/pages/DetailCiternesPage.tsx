@@ -7,6 +7,7 @@ import { CalendarDays, ChevronLeft, ChevronRight, Container, Download, Gauge, Lo
 import { api, apiErrorMessage, downloadFile } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
 import { useIsPhone } from '../hooks/useIsPhone';
+import { useAuth } from '../contexts/AuthContext';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Button';
 import { SearchInput } from '../components/ui/SearchInput';
@@ -83,7 +84,10 @@ function readStored(): number | null {
 
 export default function DetailCiternesPage() {
   const siteParams = useSiteParams();
-  const phone = useIsPhone();
+  const { user } = useAuth();
+  const phoneScreen = useIsPhone();
+  // A pompiste always gets the simple screen, whatever the device reports.
+  const phone = phoneScreen || user?.role === 'pompiste';
   const [params, setParams] = useSearchParams();
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');

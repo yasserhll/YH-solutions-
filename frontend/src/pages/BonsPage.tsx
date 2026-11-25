@@ -16,6 +16,7 @@ import {
   Loader2,
   Paperclip,
   Pencil,
+  Plus,
   QrCode,
   Search,
   Trash2,
@@ -26,6 +27,8 @@ import {
 import { api, apiErrorMessage, isQueuedOffline } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
 import { useAuth } from '../contexts/AuthContext';
+import { useIsPhone } from '../hooks/useIsPhone';
+import { Button } from '../components/ui/Button';
 import type { BonAttachment, BonTank, BonVehicle, FuelBon, FuelBonPage } from '../types';
 import { SearchInput } from '../components/ui/SearchInput';
 import { DataTable, type Column } from '../components/ui/DataTable';
@@ -128,6 +131,8 @@ export default function BonsPage() {
   const siteParams = useSiteParams();
   const { user } = useAuth();
   const isPompiste = user?.role === 'pompiste';
+  // QR codes are scanned on the ground, with a phone: a computer gets a plain button and no scanner.
+  const phone = useIsPhone();
   const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
   const [day, setDay] = useState(todayIso());
@@ -251,22 +256,30 @@ export default function BonsPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:max-w-xl">
-        <button
-          onClick={() => setScanning(true)}
-          className="flex h-32 flex-col items-center justify-center gap-2 rounded-2xl bg-orange-500 text-white shadow-lg shadow-orange-500/20 active:scale-[0.98] active:bg-orange-600"
-        >
-          <QrCode size={40} />
-          <span className="text-lg font-bold">Scanner le QR</span>
-        </button>
-        <button
-          onClick={() => setForm({ bon: null, vehicle: null })}
-          className="flex h-32 flex-col items-center justify-center gap-2 rounded-2xl border-2 border-slate-300 bg-white text-slate-800 active:scale-[0.98] active:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-        >
-          <Keyboard size={40} />
-          <span className="text-lg font-bold">Saisie manuelle</span>
-        </button>
-      </div>
+      {phone ? (
+        <div className="grid grid-cols-2 gap-3 sm:max-w-xl">
+          <button
+            onClick={() => setScanning(true)}
+            className="flex h-32 flex-col items-center justify-center gap-2 rounded-2xl bg-orange-500 text-white shadow-lg shadow-orange-500/20 active:scale-[0.98] active:bg-orange-600"
+          >
+            <QrCode size={40} />
+            <span className="text-lg font-bold">Scanner le QR</span>
+          </button>
+          <button
+            onClick={() => setForm({ bon: null, vehicle: null })}
+            className="flex h-32 flex-col items-center justify-center gap-2 rounded-2xl border-2 border-slate-300 bg-white text-slate-800 active:scale-[0.98] active:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          >
+            <Keyboard size={40} />
+            <span className="text-lg font-bold">Saisie manuelle</span>
+          </button>
+        </div>
+        ) : (
+        <div>
+          <Button onClick={() => setForm({ bon: null, vehicle: null })}>
+            <Plus size={16} /> Nouveau bon
+          </Button>
+        </div>
+      )}
 
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -663,6 +676,7 @@ function BonForm({
   const [vehicle, setVehicle] = useState<BonVehicle | null>(initialVehicle ?? (bon ? (vehicles.find((v) => v.code === bon.vehicle_code) ?? null) : null));
   const [outOfPark, setOutOfPark] = useState(!!scannedCode || (!!bon && !vehicles.some((v) => v.code === bon.vehicle_code)));
   const [vehicleSearch, setVehicleSearch] = useState('');
+  const phone = useIsPhone();
   const [scanning, setScanning] = useState(false);
   const [more, setMore] = useState(false);
   const [files, setFiles] = useState<{ file: File; url: string }[]>([]);
@@ -898,18 +912,20 @@ function BonForm({
               </div>
             ) : (
               <div className="space-y-3">
-                <button
-                  type="button"
-                  onClick={() => setScanning(true)}
-                  className="flex h-16 w-full items-center justify-center gap-3 rounded-2xl bg-orange-500 text-lg font-bold text-white active:bg-orange-600"
-                >
-                  <QrCode size={28} /> Scanner le QR du véhicule
-                </button>
+                {phone && (
+                  <button
+                    type="button"
+                    onClick={() => setScanning(true)}
+                    className="flex h-16 w-full items-center justify-center gap-3 rounded-2xl bg-orange-500 text-lg font-bold text-white active:bg-orange-600"
+                  >
+                    <QrCode size={28} /> Scanner le QR du véhicule
+                  </button>
+                )}
                 <div className="relative">
                   <Search size={20} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     className={clsx(bigInput, 'pl-12 text-lg font-medium')}
-                    placeholder="ou tapez le code : D265, E43…"
+                    placeholder={phone ? 'ou tapez le code : D265, E43…' : 'Tapez le code : D265, E43…'}
                     value={vehicleSearch}
                     onChange={(e) => setVehicleSearch(e.target.value)}
                     autoCapitalize="characters"
