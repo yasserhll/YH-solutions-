@@ -153,7 +153,9 @@ export function DashboardLayout() {
   const filterableSites = isSuperAdmin ? (allSites ?? []) : (user?.sites ?? []);
 
   // Back closes the phone drawer (only below lg, where it is an overlay).
-  useBackClose(mobileOpen && !!window.matchMedia?.('(max-width: 1023px)').matches, () => setMobileOpen(false));
+  useBackClose(mobileOpen && !!window.matchMedia?.('(max-width: 1023px)').matches, () => setMobileOpen(false), {
+    holdsUpdate: false,
+  });
 
   // Field work without network: while online, put on the phone what the
   // pompiste screens need (citernes, vehicles of each citerne) even before

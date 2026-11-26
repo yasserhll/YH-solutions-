@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { registerSW } from 'virtual:pwa-register';
 import toast from 'react-hot-toast';
 import { useQueryClient } from '@tanstack/react-query';
-import { DownloadCloud, RefreshCw, Sparkles } from 'lucide-react';
+import { DownloadCloud, PauseCircle, RefreshCw, Sparkles } from 'lucide-react';
+import clsx from 'clsx';
 import {
   askServiceWorker,
   checkConnectivity,
@@ -28,6 +29,25 @@ declare const __BUILD_ID__: string;
 const VERSION_POLL_MS = 5_000;
 /** The update banner reloads by itself after this countdown (user's rule, 2026-11-26), unless a form is open. */
 const AUTO_RELOAD_SECONDS = 5;
+
+type HoldReason = 'form' | 'typing' | 'offline';
+const holdMessages: Record<HoldReason, string> = {
+  form: 'Rechargement dès que la fenêtre ouverte sera fermée.',
+  typing: 'Rechargement dès que vous aurez fini de taper.',
+  offline: 'Rechargement dès que la connexion revient.',
+};
+/** Last time something was typed in a field (any page): a reload right then would lose it. */
+let lastTypedAt = 0;
+const TYPING_GRACE_MS = 4000;
+if (typeof document !== 'undefined') {
+  document.addEventListener('input', () => (lastTypedAt = Date.now()), { capture: true, passive: true });
+}
+function currentHoldReason(): HoldReason | null {
+  if (openWindowCount() > 0) return 'form';
+  if (Date.now() - lastTypedAt < TYPING_GRACE_MS) return 'typing';
+  if (!getConnectivity().online) return 'offline';
+  return null;
+}
 
 /** Resolves once the registration has a waiting (installed) worker, or after `timeoutMs`. */
 function waitForWaitingWorker(registration: ServiceWorkerRegistration, timeoutMs: number): Promise<void> {
@@ -338,35 +358,33 @@ export function PwaStatus() {
     }, 2000);
   }
 
-  // RECHARGER also runs by itself after a 5-second countdown (user's rule,
-  // 2026-11-26) — but never under the user's feet: not while a form / modal /
-  // the scanner is open, nor while typing in a field, nor offline or with
-  // actions still waiting to be sent. It then waits and reloads the moment
-  // that is over.
+  // RECHARGER runs by itself once the 5-second countdown ends (user's rule,
+  // 2026-11-26: it must really reload, not stay on screen). It waits only
+  // where a reload would lose something: a form / modal / the scanner open,
+  // a field typed into in the last few seconds, or no network (the new
+  // version can't be fetched). The menu and the notifications panel never
+  // hold it. Actions waiting to be sent don't either: they live in the
+  // service worker's queue (IndexedDB), which a reload keeps and replays.
   const [countdown, setCountdown] = useState(AUTO_RELOAD_SECONDS);
-  const [held, setHeld] = useState(false);
+  const [holdReason, setHoldReason] = useState<HoldReason | null>(null);
   const reloadRef = useRef(reloadForUpdate);
   reloadRef.current = reloadForUpdate;
   useEffect(() => {
     if (!needRefresh) return;
+    const started = Date.now();
     setCountdown(AUTO_RELOAD_SECONDS);
-    setHeld(false);
-    let left = AUTO_RELOAD_SECONDS;
-    const timer = window.setInterval(() => {
-      if (left > 0) {
-        left -= 1;
-        setCountdown(left);
-        if (left > 0) return;
-      }
-      const active = document.activeElement as HTMLElement | null;
-      const typing = !!active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT' || active.isContentEditable);
-      const { online, queued } = getConnectivity();
-      const busy = openWindowCount() > 0 || typing || !online || queued > 0;
-      setHeld(busy);
-      if (busy) return;
+    setHoldReason(null);
+    const tick = () => {
+      const left = Math.max(0, AUTO_RELOAD_SECONDS - Math.floor((Date.now() - started) / 1000));
+      setCountdown(left);
+      if (left > 0) return;
+      const reason = currentHoldReason();
+      setHoldReason(reason);
+      if (reason) return;
       window.clearInterval(timer);
       void reloadRef.current();
-    }, 1000);
+    };
+    const timer = window.setInterval(tick, 250);
     return () => window.clearInterval(timer);
   }, [needRefresh]);
 
@@ -375,31 +393,90 @@ export function PwaStatus() {
   // persistent floating card (not a toast, so it can't be missed).
   if (!needRefresh) return null;
 
+  const holding = countdown === 0 && holdReason !== null;
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex justify-center safe-px pb-[calc(1rem+env(safe-area-inset-bottom))]">
-      <div className="animate-notif-in pointer-events-auto flex w-full max-w-md items-center gap-3 rounded-2xl border border-slate-200 bg-white/95 p-3 pl-4 shadow-xl shadow-slate-900/15 backdrop-blur dark:border-slate-700 dark:bg-slate-900/95 dark:shadow-black/50">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-600 dark:bg-sky-500/15 dark:text-sky-400">
-          <Sparkles size={18} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">Nouvelle version disponible</div>
-          <div className="text-xs text-slate-500 dark:text-slate-400">
-            {countdown > 0
-              ? `Rechargement automatique dans ${countdown} s…`
-              : held
-                ? 'Rechargement dès que vous aurez fini (formulaire ouvert ou envoi en cours).'
-                : 'Rechargement…'}
+      <div
+        role="status"
+        aria-live="polite"
+        className="animate-notif-in pointer-events-auto relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-xl shadow-slate-900/15 backdrop-blur dark:border-slate-700 dark:bg-slate-900/95 dark:shadow-black/50"
+      >
+        <div className="flex items-center gap-3 p-3 pl-3.5">
+          <CountdownRing seconds={countdown} total={AUTO_RELOAD_SECONDS} holding={holding} />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-900 dark:text-slate-100">
+              <Sparkles size={14} className="shrink-0 text-sky-500" />
+              Nouvelle version disponible
+            </div>
+            <div className="text-xs text-slate-500 dark:text-slate-400">
+              {countdown > 0 ? (
+                <>
+                  Rechargement automatique dans{' '}
+                  <span key={countdown} className="animate-count-pop inline-block font-semibold tabular-nums text-sky-600 dark:text-sky-400">
+                    {countdown} s
+                  </span>
+                </>
+              ) : holding ? (
+                <span className="text-amber-600 dark:text-amber-400">{holdMessages[holdReason!]}</span>
+              ) : (
+                'Rechargement…'
+              )}
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={reloadForUpdate}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-sky-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-500 active:bg-sky-700"
+          >
+            <RefreshCw size={14} className={countdown === 0 && !holding ? 'animate-spin' : undefined} />
+            Recharger
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={reloadForUpdate}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-sky-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-500 active:bg-sky-700"
-        >
-          <RefreshCw size={14} />
-          Recharger{countdown > 0 ? ` (${countdown})` : ''}
-        </button>
+        {/* Drains over the 5 seconds, from full to empty. */}
+        <div className="h-1 w-full bg-slate-100 dark:bg-slate-800">
+          <div
+            key={String(needRefresh)}
+            className={clsx(
+              'h-full origin-left',
+              holding ? 'animate-pulse bg-amber-400' : 'animate-update-bar bg-gradient-to-r from-sky-500 to-emerald-400',
+            )}
+            style={{ animationDuration: holding ? undefined : `${AUTO_RELOAD_SECONDS}s` }}
+          />
+        </div>
       </div>
     </div>
+  );
+}
+
+/** Circular countdown: the ring empties over `total` seconds, the number in the middle. */
+function CountdownRing({ seconds, total, holding }: { seconds: number; total: number; holding: boolean }) {
+  const r = 16;
+  const c = 2 * Math.PI * r;
+  return (
+    <span className="relative flex h-10 w-10 shrink-0 items-center justify-center">
+      <svg viewBox="0 0 40 40" className="absolute inset-0 h-10 w-10 -rotate-90" aria-hidden="true">
+        <circle cx="20" cy="20" r={r} fill="none" strokeWidth="3.5" className="stroke-sky-100 dark:stroke-sky-500/15" />
+        <circle
+          cx="20"
+          cy="20"
+          r={r}
+          fill="none"
+          strokeWidth="3.5"
+          strokeLinecap="round"
+          strokeDasharray={c}
+          className={holding ? 'animate-pulse stroke-amber-400' : 'animate-update-ring stroke-sky-500'}
+          style={{ ['--ring-c' as string]: `${c}px`, animationDuration: holding ? undefined : `${total}s` }}
+        />
+      </svg>
+      {seconds > 0 ? (
+        <span key={seconds} className="animate-count-pop relative text-sm font-bold tabular-nums text-sky-600 dark:text-sky-400">
+          {seconds}
+        </span>
+      ) : holding ? (
+        <PauseCircle size={16} className="relative text-amber-500" />
+      ) : (
+        <RefreshCw size={15} className="relative animate-spin text-sky-500" />
+      )}
+    </span>
   );
 }

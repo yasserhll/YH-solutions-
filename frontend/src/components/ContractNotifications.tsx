@@ -228,7 +228,7 @@ export function ContractNotifications({ autoOpen }: { autoOpen: boolean }) {
     setOpen(false);
     if (signature) writeSeen(signature);
   }
-  useBackClose(open, close);
+  useBackClose(open, close, { holdsUpdate: false });
 
   if (!enabled) return null;
 

@@ -16,7 +16,7 @@ import { useEffect, useRef } from 'react';
  *   history (that race used to close the freshly opened form, field bug
  *   2026-11-26), and nothing can pop the wrong entry.
  */
-type Entry = { id: number; close: () => void };
+type Entry = { id: number; close: () => void; holdsUpdate: boolean };
 
 const stack: Entry[] = [];
 let seq = 0;
@@ -65,13 +65,19 @@ function onPop() {
 
 let listening = false;
 
-/** How many windows (forms, modals, scanner, menu) are open right now — the update banner never reloads under one. */
+/**
+ * How many windows that may hold unsaved input (forms, modals, the scanner)
+ * are open right now — the update banner never reloads under one. The menu
+ * and the notifications panel don't count: the bell panel opens by itself on
+ * the Dashboard, and counting it kept the banner waiting forever (2026-11-26).
+ */
 export function openWindowCount(): number {
-  return stack.length;
+  return stack.filter((e) => e.holdsUpdate).length;
 }
 
 
-export function useBackClose(open: boolean, onClose: () => void) {
+/** `holdsUpdate: false` for a window with nothing to lose on reload (menu, notifications panel). */
+export function useBackClose(open: boolean, onClose: () => void, { holdsUpdate = true }: { holdsUpdate?: boolean } = {}) {
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
 
@@ -81,7 +87,7 @@ export function useBackClose(open: boolean, onClose: () => void) {
       window.addEventListener('popstate', onPop);
       listening = true;
     }
-    const entry: Entry = { id: ++seq, close: () => closeRef.current() };
+    const entry: Entry = { id: ++seq, close: () => closeRef.current(), holdsUpdate };
     stack.push(entry);
     sync();
     return () => {
@@ -89,5 +95,5 @@ export function useBackClose(open: boolean, onClose: () => void) {
       if (i >= 0) stack.splice(i, 1);
       sync();
     };
-  }, [open]);
+  }, [open, holdsUpdate]);
 }
