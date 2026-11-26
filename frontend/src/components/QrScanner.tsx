@@ -4,24 +4,38 @@ import { Camera, ImageUp, Loader2, RefreshCw } from "lucide-react";
 import { Modal } from "./ui/Modal";
 import { Button } from "./ui/Button";
 
-/** Reads the QR code in an image (a still photo, or one video frame drawn on the canvas). */
+/**
+ * Reads the QR code in an image (a still photo, or one video frame drawn on
+ * the canvas) with jsQR. `crop` (0–1) keeps only the centre square — where
+ * the frame on screen asks the QR to be — at FULL resolution: the labels'
+ * QR codes carry every field of the vehicle, so they are dense, and
+ * shrinking the whole picture (what it did before) made them hard to read
+ * and slow. `cap` limits the pixels analysed.
+ */
 function decodeWithJsQr(
   canvas: HTMLCanvasElement,
   source: CanvasImageSource,
   width: number,
   height: number,
+  { crop = 1, cap = 900, invert = false }: { crop?: number; cap?: number; invert?: boolean } = {},
 ): string | null {
   if (!width || !height) return null;
-  const scale = Math.min(1, 900 / Math.max(width, height));
-  canvas.width = Math.round(width * scale);
-  canvas.height = Math.round(height * scale);
+  const side = crop < 1 ? Math.round(Math.min(width, height) * crop) : 0;
+  const sw = side || width;
+  const sh = side || height;
+  const sx = side ? Math.round((width - side) / 2) : 0;
+  const sy = side ? Math.round((height - side) / 2) : 0;
+  const scale = Math.min(1, cap / Math.max(sw, sh));
+  canvas.width = Math.round(sw * scale);
+  canvas.height = Math.round(sh * scale);
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return null;
-  ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+  ctx.drawImage(source, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
   const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
   return (
     jsQR(image.data, image.width, image.height, {
-      inversionAttempts: "attemptBoth",
+      // The labels are dark on white: skipping the inverted pass halves the work per frame.
+      inversionAttempts: invert ? "attemptBoth" : "dontInvert",
     })?.data ?? null
   );
 }
@@ -44,8 +58,9 @@ async function nativeDetector(): Promise<Detector | null> {
 async function openCamera(): Promise<MediaStream> {
   if (!navigator.mediaDevices?.getUserMedia) throw new Error("unsupported");
   try {
+    // Full HD: a dense QR needs pixels (only the centre is analysed, so it stays fast).
     return await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
       audio: false,
     });
   } catch (e) {
@@ -108,7 +123,7 @@ function ScannerBody({ onClose, onResult }: { onClose: () => void; onResult: (te
 
   useEffect(() => {
     let stream: MediaStream | null = null;
-    let timer = 0;
+    let cancelNext = () => {};
     let watchdog = 0;
     let stopped = false;
     let busy = false;
@@ -116,7 +131,7 @@ function ScannerBody({ onClose, onResult }: { onClose: () => void; onResult: (te
     setStarting(true);
 
     const release = () => {
-      window.clearTimeout(timer);
+      cancelNext();
       window.clearTimeout(watchdog);
       stream?.getTracks().forEach((t) => t.stop());
       stream = null;
@@ -136,7 +151,13 @@ function ScannerBody({ onClose, onResult }: { onClose: () => void; onResult: (te
           return;
         }
         stream = s;
-        s.getVideoTracks().forEach((t) => t.addEventListener("ended", () => !stopped && !doneRef.current && restart()));
+        s.getVideoTracks().forEach((t) => {
+          t.addEventListener("ended", () => !stopped && !doneRef.current && restart());
+          // Keep focusing while the phone moves towards the label (where the camera allows it).
+          const caps = (t.getCapabilities?.() ?? {}) as { focusMode?: string[] };
+          if (caps.focusMode?.includes("continuous"))
+            t.applyConstraints({ advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet] }).catch(() => undefined);
+        });
         const video = videoRef.current;
         if (!video) return;
         video.srcObject = s;
@@ -153,12 +174,36 @@ function ScannerBody({ onClose, onResult }: { onClose: () => void; onResult: (te
           if (!stopped && v && v.readyState < v.HAVE_CURRENT_DATA) setError("La caméra ne répond pas. Touchez « Relancer la caméra » ou prenez une photo du QR.");
         }, 8000);
 
+        // Every new camera frame is analysed as soon as the previous one is done
+        // (no fixed 120 ms pause any more). Per frame:
+        // - the phone's own reader (BarcodeDetector, Android) when it exists —
+        //   jsQR then only every 6th frame, as a safety net, instead of on
+        //   every frame on top of it (that doubled the time before);
+        // - otherwise jsQR on the centre square at full resolution, and every
+        //   4th frame the whole picture (a QR held off-centre).
+        // jsQR results must read the SAME text on two frames in a row before
+        // they are used: a wrong reading never gets through.
+        let frame = 0;
+        let candidate: string | null = null;
+        let candidateAt = 0;
+        type VideoWithFrames = HTMLVideoElement & { requestVideoFrameCallback?: (cb: () => void) => number; cancelVideoFrameCallback?: (h: number) => void };
+        const schedule = () => {
+          const v = videoRef.current as VideoWithFrames | null;
+          if (v?.requestVideoFrameCallback) {
+            const h = v.requestVideoFrameCallback(() => void tick());
+            cancelNext = () => v.cancelVideoFrameCallback?.(h);
+          } else {
+            const h = requestAnimationFrame(() => void tick());
+            cancelNext = () => cancelAnimationFrame(h);
+          }
+        };
         const tick = async () => {
           if (stopped || doneRef.current) return;
           const v = videoRef.current;
           const canvas = canvasRef.current;
           if (!busy && v && canvas && v.readyState >= v.HAVE_CURRENT_DATA && v.videoWidth) {
             busy = true;
+            frame += 1;
             try {
               let text: string | null = null;
               if (detector) {
@@ -167,19 +212,31 @@ function ScannerBody({ onClose, onResult }: { onClose: () => void; onResult: (te
                 } catch {
                   text = null;
                 }
+                if (text && !stopped) {
+                  deliver(text);
+                  return;
+                }
               }
-              if (!text) text = decodeWithJsQr(canvas, v, v.videoWidth, v.videoHeight);
-              if (text && !stopped) {
-                deliver(text);
-                return;
+              if (!detector || frame % 6 === 0) {
+                const whole = !detector && frame % 4 === 0;
+                text = decodeWithJsQr(canvas, v, v.videoWidth, v.videoHeight, whole ? { cap: 800 } : { crop: 0.8, cap: 900 });
+                if (text) {
+                  const now = performance.now();
+                  if (text === candidate && now - candidateAt < 1500) {
+                    if (!stopped) deliver(text);
+                    return;
+                  }
+                  candidate = text;
+                  candidateAt = now;
+                }
               }
             } finally {
               busy = false;
             }
           }
-          timer = window.setTimeout(tick, 120);
+          if (!stopped && !doneRef.current) schedule();
         };
-        timer = window.setTimeout(tick, 120);
+        schedule();
       } catch (e) {
         if (stopped) return;
         setStarting(false);
@@ -224,7 +281,8 @@ function ScannerBody({ onClose, onResult }: { onClose: () => void; onResult: (te
           text = null;
         }
       }
-      if (!text) text = decodeWithJsQr(canvas, bitmap, bitmap.width, bitmap.height);
+      // A still photo: the whole picture, both polarities, more pixels (no hurry here).
+      if (!text) text = decodeWithJsQr(canvas, bitmap, bitmap.width, bitmap.height, { cap: 1600, invert: true });
       bitmap.close();
       if (text) deliver(text);
       else setError("Aucun QR code lisible sur cette photo. Rapprochez-vous et réessayez.");
