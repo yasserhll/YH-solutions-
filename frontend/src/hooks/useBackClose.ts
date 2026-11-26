@@ -65,6 +65,12 @@ function onPop() {
 
 let listening = false;
 
+/** How many windows (forms, modals, scanner, menu) are open right now — the update banner never reloads under one. */
+export function openWindowCount(): number {
+  return stack.length;
+}
+
+
 export function useBackClose(open: boolean, onClose: () => void) {
   const closeRef = useRef(onClose);
   closeRef.current = onClose;

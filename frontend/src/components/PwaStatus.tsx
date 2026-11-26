@@ -10,6 +10,7 @@ import {
   setQueuedCount,
   subscribeConnectivity,
 } from '../utils/connectivity';
+import { openWindowCount } from '../hooks/useBackClose';
 
 type SyncFailure = { method: string; url: string; status?: number; message: string };
 
@@ -25,6 +26,8 @@ declare const __BUILD_ID__: string;
  * comes back to the foreground.
  */
 const VERSION_POLL_MS = 5_000;
+/** The update banner reloads by itself after this countdown (user's rule, 2026-11-26), unless a form is open. */
+const AUTO_RELOAD_SECONDS = 5;
 
 /** Resolves once the registration has a waiting (installed) worker, or after `timeoutMs`. */
 function waitForWaitingWorker(registration: ServiceWorkerRegistration, timeoutMs: number): Promise<void> {
@@ -335,6 +338,38 @@ export function PwaStatus() {
     }, 2000);
   }
 
+  // RECHARGER also runs by itself after a 5-second countdown (user's rule,
+  // 2026-11-26) — but never under the user's feet: not while a form / modal /
+  // the scanner is open, nor while typing in a field, nor offline or with
+  // actions still waiting to be sent. It then waits and reloads the moment
+  // that is over.
+  const [countdown, setCountdown] = useState(AUTO_RELOAD_SECONDS);
+  const [held, setHeld] = useState(false);
+  const reloadRef = useRef(reloadForUpdate);
+  reloadRef.current = reloadForUpdate;
+  useEffect(() => {
+    if (!needRefresh) return;
+    setCountdown(AUTO_RELOAD_SECONDS);
+    setHeld(false);
+    let left = AUTO_RELOAD_SECONDS;
+    const timer = window.setInterval(() => {
+      if (left > 0) {
+        left -= 1;
+        setCountdown(left);
+        if (left > 0) return;
+      }
+      const active = document.activeElement as HTMLElement | null;
+      const typing = !!active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT' || active.isContentEditable);
+      const { online, queued } = getConnectivity();
+      const busy = openWindowCount() > 0 || typing || !online || queued > 0;
+      setHeld(busy);
+      if (busy) return;
+      window.clearInterval(timer);
+      void reloadRef.current();
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [needRefresh]);
+
   // Connection state is the chip in the top bar (ConnectionStatus) — never a
   // bar over the navigation. Only the update offer is drawn here: a
   // persistent floating card (not a toast, so it can't be missed).
@@ -348,7 +383,13 @@ export function PwaStatus() {
         </span>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">Nouvelle version disponible</div>
-          <div className="truncate text-xs text-slate-500 dark:text-slate-400">Rechargez pour profiter des nouveautés.</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">
+            {countdown > 0
+              ? `Rechargement automatique dans ${countdown} s…`
+              : held
+                ? 'Rechargement dès que vous aurez fini (formulaire ouvert ou envoi en cours).'
+                : 'Rechargement…'}
+          </div>
         </div>
         <button
           type="button"
@@ -356,7 +397,7 @@ export function PwaStatus() {
           className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-sky-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-500 active:bg-sky-700"
         >
           <RefreshCw size={14} />
-          Recharger
+          Recharger{countdown > 0 ? ` (${countdown})` : ''}
         </button>
       </div>
     </div>
