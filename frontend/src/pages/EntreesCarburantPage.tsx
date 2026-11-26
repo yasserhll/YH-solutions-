@@ -8,6 +8,7 @@ import {
   Camera,
   CheckCircle2,
   ChevronDown,
+  CloudOff,
   Container,
   Download,
   FileSpreadsheet,
@@ -21,6 +22,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
+import { addPending, newRequestKey, removePending, usePending, type PendingItem } from '../utils/offlinePending';
 import { api, apiErrorMessage, downloadFile, uploadErrorMessage, isQueuedOffline } from '../api/client';
 import { useSiteParams } from '../hooks/useSiteParams';
 import { useAuth } from '../contexts/AuthContext';
@@ -189,6 +191,8 @@ function PompisteView() {
     queryFn: () => api.get<DeliveryPage>('/entrees', { params: listParams }).then((r) => r.data),
     enabled: !!tank,
   });
+  // Livraisons saved WITHOUT network, still waiting to be sent (utils/offlinePending).
+  const pending = usePending('livraison', tank?.id, user?.id);
 
   const remove = useMutation({
     mutationFn: (d: FuelDelivery) => api.delete(`/entrees/${d.id}`),
@@ -238,6 +242,9 @@ function PompisteView() {
     );
 
   const deliveries = list?.data ?? [];
+  // Unless the list already has it (sent meanwhile): same BL.
+  const listedBl = new Set(deliveries.map((d) => (d.delivery_note ?? '').trim().toUpperCase()));
+  const pendingShown = pending.filter((p) => p.error || !p.bl_number || !listedBl.has(p.bl_number.trim().toUpperCase()));
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
@@ -270,10 +277,13 @@ function PompisteView() {
         </h2>
         {listLoading ? (
           <LoadingState />
-        ) : deliveries.length === 0 ? (
+        ) : deliveries.length === 0 && pendingShown.length === 0 ? (
           <div className="rounded-2xl border-2 border-dashed border-slate-200 p-8 text-center text-slate-500 dark:border-slate-800 dark:text-slate-400">Aucune livraison saisie sur cette citerne.</div>
         ) : (
           <div className="grid gap-3">
+            {[...pendingShown].reverse().map((p) => (
+              <PendingDeliveryCard key={p.key} item={p} />
+            ))}
             {deliveries.map((d) => (
               <DeliveryCard
                 key={d.id}
@@ -300,6 +310,42 @@ function PompisteView() {
         onCancel={() => setDeleting(null)}
         isLoading={remove.isPending}
       />
+    </div>
+  );
+}
+
+/** A livraison saved with no network: shown at once, sent by itself when the network is back. */
+function PendingDeliveryCard({ item }: { item: PendingItem }) {
+  const failed = !!item.error;
+  return (
+    <div className={clsx('rounded-2xl border-2 border-dashed p-4', failed ? 'border-red-300 bg-red-50 dark:border-red-500/40 dark:bg-red-500/10' : 'border-amber-300 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-500/10')}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="font-bold text-slate-900 dark:text-slate-100">{item.supplier || 'Fournisseur'}</div>
+          <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            BL {item.bl_number || '—'} · {fmtDate(item.date)} {item.time ? item.time.slice(0, 5) : ''}
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100">{fmt(item.quantity)}</div>
+          <div className="text-xs text-slate-400">litres</div>
+        </div>
+      </div>
+      {failed ? (
+        <div className="mt-3 space-y-2 border-t border-red-200 pt-3 text-sm dark:border-red-500/30">
+          <div className="flex items-start gap-2 font-medium text-red-700 dark:text-red-400">
+            <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+            <span>Non enregistrée : {item.error}. Saisissez cette livraison à nouveau.</span>
+          </div>
+          <button onClick={() => removePending(item.key)} className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 active:bg-slate-100 dark:text-slate-300">
+            Retirer ce message
+          </button>
+        </div>
+      ) : (
+        <div className="mt-3 flex items-center gap-2 border-t border-amber-200 pt-3 text-sm font-medium text-amber-700 dark:border-amber-500/30 dark:text-amber-400">
+          <CloudOff size={16} /> En attente d’envoi — partira tout seul au retour du réseau
+        </div>
+      )}
     </div>
   );
 }
@@ -1026,10 +1072,28 @@ function DeliveryForm({
   };
 
   const save = useMutation({
-    mutationFn: () => api.post(delivery ? `/entrees/${delivery.id}` : '/entrees', buildBody()),
-    onSuccess: (res) => {
+    // A fresh key per attempt; the same key identifies the livraison in the offline queue.
+    mutationFn: async () => {
+      const key = newRequestKey();
+      const res = await api.post(delivery ? `/entrees/${delivery.id}` : '/entrees', buildBody(), { headers: { 'X-Idempotency-Key': key } });
+      return { res, key };
+    },
+    onSuccess: ({ res, key }) => {
       // Offline: the "saved on the device" toast (api/client.ts) says it already.
       if (!isQueuedOffline(res)) toast.success(delivery ? 'Livraison modifiée' : 'Livraison enregistrée');
+      else if (!delivery && form.fuel_tank_id)
+        addPending({
+          key,
+          kind: 'livraison',
+          user_id: user?.id ?? null,
+          tank_id: Number(form.fuel_tank_id),
+          created_at: Date.now(),
+          date: form.date,
+          time: form.time || null,
+          quantity: num(form.quantity),
+          supplier: supplierValue || null,
+          bl_number: form.delivery_note.trim() || null,
+        });
       queryClient.invalidateQueries({ queryKey: ['entrees'] });
       queryClient.invalidateQueries({ queryKey: ['fuel'] });
       onClose();

@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   ArrowLeftRight,
   Camera,
+  CloudOff,
   CheckCircle2,
   ChevronDown,
   Container,
@@ -38,6 +39,7 @@ import { Modal } from '../components/ui/Modal';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { EmptyState, LoadingState } from '../components/ui/States';
 import { QrScanner } from '../components/QrScanner';
+import { addPending, newRequestKey, nextNumber, removePending, usePending, type PendingItem } from '../utils/offlinePending';
 
 /*
  * "Bons carburant" — built for a pompiste with only a phone:
@@ -156,6 +158,34 @@ export default function BonsPage() {
   };
   const choosing = params.get('choisir') === '1' || !tank;
 
+  // Bons saved WITHOUT network, still waiting to be sent (utils/offlinePending).
+  const pending = usePending('bon', tank?.id, user?.id);
+  const waiting = pending.filter((p) => !p.error).sort((a, b) => a.created_at - b.created_at);
+  const waitingSig = JSON.stringify(waiting.map((p) => [p.key, p.serie_end, p.bon_number]));
+  // The next bon starts after them: série fin of the last one, n° + 1.
+  const effectiveTank = useMemo(() => {
+    if (!tank || waiting.length === 0) return tank;
+    const lastEnd = waiting[waiting.length - 1].serie_end;
+    return {
+      ...tank,
+      last_serie: lastEnd ?? tank.last_serie,
+      next_bon: nextNumber(tank.next_bon, waiting.map((p) => p.bon_number)),
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tank, waitingSig]);
+
+  // While online: keep every citerne's vehicle list on the phone, so the form
+  // still finds the vehicles after the network is lost.
+  useEffect(() => {
+    tanks?.forEach((t) =>
+      queryClient.prefetchQuery({
+        queryKey: ['bons', 'vehicles', t.id],
+        queryFn: () => api.get<BonVehicle[]>('/bons/vehicles', { params: { fuel_tank_id: t.id } }).then((r) => r.data),
+        staleTime: 5 * 60_000,
+      }),
+    );
+  }, [tanks, queryClient]);
+
   const { data: vehicles = [] } = useQuery({
     queryKey: ['bons', 'vehicles', tank?.id],
     queryFn: () => api.get<BonVehicle[]>('/bons/vehicles', { params: { fuel_tank_id: tank!.id } }).then((r) => r.data),
@@ -238,6 +268,9 @@ export default function BonsPage() {
     );
 
   const bons = dayList?.data ?? [];
+  // Pending lines of the day, unless the list already has them (sent meanwhile).
+  const listed = new Set(bons.map((b) => (b.bon_number ?? '').replace(/^0+/, '')));
+  const pendingToday = pending.filter((p) => p.date === day && !(p.bon_number && !p.error && listed.has(p.bon_number.replace(/^0+/, ''))));
 
   // Step 2 — scan or type, and today's bons of this citerne.
   return (
@@ -247,7 +280,7 @@ export default function BonsPage() {
         <div className="min-w-0 flex-1">
           <div className="truncate text-lg font-bold">{tank!.name}</div>
           <div className="text-sm text-slate-300">
-            {tank!.site.name} · série actuelle <span className="font-mono font-semibold text-white">{fmt(dayList?.last_serie ?? tank!.last_serie)}</span>
+            {tank!.site.name} · série actuelle <span className="font-mono font-semibold text-white">{fmt(waiting.length ? effectiveTank!.last_serie : (dayList?.last_serie ?? tank!.last_serie))}</span>
           </div>
         </div>
         {tanks.length > 1 && (
@@ -302,10 +335,13 @@ export default function BonsPage() {
         </div>
         {dayLoading ? (
           <LoadingState />
-        ) : bons.length === 0 ? (
+        ) : bons.length === 0 && pendingToday.length === 0 ? (
           <div className="rounded-2xl border-2 border-dashed border-slate-200 p-8 text-center text-slate-500 dark:border-slate-800 dark:text-slate-400">Aucun bon pour ce jour.</div>
         ) : (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {[...pendingToday].reverse().map((p) => (
+              <PendingBonCard key={p.key} item={p} />
+            ))}
             {bons.map((b) => (
               <BonCard
                 key={b.id}
@@ -325,7 +361,7 @@ export default function BonsPage() {
       {form && (
         <BonForm
           key={form.bon?.id ?? 'new'}
-          tank={tank!}
+          tank={effectiveTank!}
           vehicles={vehicles}
           bon={form.bon}
           initialVehicle={form.vehicle}
@@ -343,6 +379,48 @@ export default function BonsPage() {
         onCancel={() => setDeleting(null)}
         isLoading={remove.isPending}
       />
+    </div>
+  );
+}
+
+/** A bon saved with no network: shown at once, sent by itself when the network is back. */
+function PendingBonCard({ item }: { item: PendingItem }) {
+  const failed = !!item.error;
+  return (
+    <div className={clsx('rounded-2xl border-2 border-dashed p-4', failed ? 'border-red-300 bg-red-50 dark:border-red-500/40 dark:bg-red-500/10' : 'border-amber-300 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-500/10')}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-md bg-slate-900 px-2 py-0.5 font-mono text-sm font-bold text-white dark:bg-white dark:text-slate-900">{item.vehicle_code || '—'}</span>
+            <span className="font-mono text-sm font-semibold text-red-600 dark:text-red-400">N° {item.bon_number || '—'}</span>
+          </div>
+          <div className="mt-1 truncate text-sm text-slate-500 dark:text-slate-400">
+            {hhmm(item.time) || '—'} · {item.driver_name || 'conducteur non saisi'}
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100">{fmt(item.quantity)}</div>
+          <div className="text-xs text-slate-400">litres</div>
+        </div>
+      </div>
+      <div className="mt-2 font-mono text-xs text-slate-400 dark:text-slate-500">
+        {fmt(item.serie_start)} → {fmt(item.serie_end)}
+      </div>
+      {failed ? (
+        <div className="mt-3 space-y-2 border-t border-red-200 pt-3 text-sm dark:border-red-500/30">
+          <div className="flex items-start gap-2 font-medium text-red-700 dark:text-red-400">
+            <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+            <span>Non enregistré : {item.error}. Saisissez ce bon à nouveau.</span>
+          </div>
+          <button onClick={() => removePending(item.key)} className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 active:bg-slate-100 dark:text-slate-300">
+            Retirer ce message
+          </button>
+        </div>
+      ) : (
+        <div className="mt-3 flex items-center gap-2 border-t border-amber-200 pt-3 text-sm font-medium text-amber-700 dark:border-amber-500/30 dark:text-amber-400">
+          <CloudOff size={16} /> En attente d’envoi — partira tout seul au retour du réseau
+        </div>
+      )}
     </div>
   );
 }
@@ -830,10 +908,32 @@ function BonForm({
   };
 
   const save = useMutation({
-    mutationFn: () => api.post(bon ? `/bons/${bon.id}` : '/bons', buildBody()),
-    onSuccess: (res) => {
+    // A fresh key per attempt (a refused attempt must not be replayed as-is);
+    // the same key identifies the bon in the offline queue.
+    mutationFn: async () => {
+      const key = newRequestKey();
+      const res = await api.post(bon ? `/bons/${bon.id}` : '/bons', buildBody(), { headers: { 'X-Idempotency-Key': key } });
+      return { res, key };
+    },
+    onSuccess: ({ res, key }) => {
       // Offline: the "saved on the device" toast (api/client.ts) says it already.
       if (!isQueuedOffline(res)) toast.success(bon ? 'Bon modifié' : 'Bon enregistré');
+      else if (!bon)
+        addPending({
+          key,
+          kind: 'bon',
+          user_id: user?.id ?? null,
+          tank_id: tank.id,
+          created_at: Date.now(),
+          date: form.date,
+          time: form.time || null,
+          quantity: num(form.quantity),
+          bon_number: form.bon_number.trim() || null,
+          vehicle_code: (vehicle ? parcOf(vehicle) : form.vehicle_code.trim()) || null,
+          driver_name: form.driver_name.trim() || null,
+          serie_start: num(form.serie_start),
+          serie_end: num(form.serie_end),
+        });
       queryClient.invalidateQueries({ queryKey: ['bons'] });
       queryClient.invalidateQueries({ queryKey: ['fuel'] });
       onClose();

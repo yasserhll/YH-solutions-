@@ -27,6 +27,12 @@ const SYNC_TAG = 'offline-queue';
 const GET_TIMEOUT_MS = 10000;
 const MAX_AGE_MS = 7 * 24 * 3600 * 1000; // same as the server's idempotency keys
 const MAX_ATTEMPTS = 5; // server errors before giving up on one request
+// A write with no answer after this long (very weak signal) is kept in the
+// queue instead of leaving the form spinning; the idempotency key makes it
+// safe even if the server did receive it.
+const WRITE_TIMEOUT_MS = 45000;
+// A replay (photos on a weak signal) gets longer, but never hangs the queue forever.
+const REPLAY_TIMEOUT_MS = 120000;
 
 // Never cached / never queued.
 const NOT_CACHED = [/^\/api\/me$/, /^\/api\/ping$/, /\/export/, /^\/api\/push\//];
@@ -82,6 +88,7 @@ const firstEntry = () =>
     req.onsuccess = () => resolve(req.result ? req.result.value : null);
     req.onerror = () => reject(req.error);
   }));
+const queuedKeys = () => tx('readonly', (store) => asPromise(store.index('key').getAllKeys()));
 const removeEntry = (id) => tx('readwrite', (store) => store.delete(id));
 const saveEntry = (entry) => tx('readwrite', (store) => store.put(entry));
 
@@ -204,7 +211,25 @@ async function sendOrQueue(request, path) {
   const body = queueable && request.method !== 'DELETE' ? await request.clone().arrayBuffer() : null;
 
   try {
-    const response = await fetch(request);
+    let response;
+    if (queueable) {
+      // Sent from the copy we keep, with a time limit (see WRITE_TIMEOUT_MS).
+      const controller = new AbortController();
+      const limit = setTimeout(() => controller.abort(), WRITE_TIMEOUT_MS);
+      try {
+        response = await fetch(request.url, {
+          method: request.method,
+          headers: request.headers,
+          body,
+          credentials: 'same-origin',
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(limit);
+      }
+    } else {
+      response = await fetch(request);
+    }
     // Backend down behind the proxy / Wi-Fi login page: not received.
     // (A 504 may have been processed: the idempotency key makes the replay safe.)
     if (!fromApi(response)) throw new Error('server unreachable');
@@ -275,15 +300,23 @@ async function replayAll() {
     }
 
     let response;
+    const controller = new AbortController();
+    const limit = setTimeout(() => controller.abort(), REPLAY_TIMEOUT_MS);
     try {
       response = await fetch(entry.url, {
         method: entry.method,
         headers: entry.headers,
         body: entry.body,
         credentials: 'same-origin',
+        signal: controller.signal,
       });
     } catch {
-      break; // still no network: keep it (and everything after it) for later
+      // No network, or too slow to finish: keep it (and everything after it)
+      // for later. If the server did get it, the idempotency key answers the
+      // next replay with the same result — never a second bon.
+      break;
+    } finally {
+      clearTimeout(limit);
     }
     if (!fromApi(response)) break; // server still unreachable behind the proxy
 
@@ -297,8 +330,11 @@ async function replayAll() {
     }
 
     await removeEntry(entry.id);
+    const message = response.ok ? null : await messageOf(response);
     if (response.ok) sent += 1;
-    else failed.push({ method: entry.method, url: entry.url, status: response.status, message: await messageOf(response) });
+    else failed.push({ method: entry.method, url: entry.url, status: response.status, message });
+    // Per request, so a page can drop its "en attente d'envoi" line (or show why it was refused).
+    broadcast({ type: 'offline-sent', key: entry.key, ok: response.ok, status: response.status, message });
   }
 
   let remaining = 0;
@@ -334,6 +370,13 @@ self.addEventListener('message', (event) => {
   if (type === 'flush-offline-queue') event.waitUntil(flush());
   // Logout: this account's saved data leaves the device.
   if (type === 'clear-api-cache') event.waitUntil(caches.delete(API_CACHE));
+  if (type === 'offline-queue-keys') {
+    event.waitUntil(
+      queuedKeys()
+        .catch(() => null)
+        .then((keys) => event.source && event.source.postMessage({ type: 'offline-queue-keys', keys })),
+    );
+  }
   if (type === 'offline-queue-status') {
     event.waitUntil(queueCount().then((count) => event.source && event.source.postMessage({ type: 'offline-queue', count })));
   }

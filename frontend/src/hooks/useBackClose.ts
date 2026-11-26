@@ -2,16 +2,68 @@ import { useEffect, useRef } from 'react';
 
 /**
  * The phone's Back button (Android back button / gesture, iOS swipe) closes
- * the window that is open (a form, a modal, the menu, the scanner) instead of
- * leaving the page — user's rule: Back must never throw the user out of the
+ * the window that is open (a form, a modal, the menu, the QR scanner) instead
+ * of leaving the page — user's rule: Back never throws the user out of the
  * app or back to the login page.
  *
- * While `open`, one extra history entry (same URL, same router state) is
- * pushed; Back pops it and we call `onClose`. Closing by the UI removes that
- * entry again (history.back()). Stacked windows close one at a time, top first.
+ * ONE manager for every window, holding at most ONE extra history entry (a
+ * "guard", same URL + same router state) while at least one window is open:
+ * - Back pops the guard → the TOP window is closed; if others stay open the
+ *   guard is pushed again.
+ * - Closing by the UI does NOT touch the history at once: the guard is only
+ *   removed (history.back()) when no window is left open a moment later. So
+ *   "scanner closes → bon form opens" in the same click never races with the
+ *   history (that race used to close the freshly opened form, field bug
+ *   2026-11-26), and nothing can pop the wrong entry.
  */
-const stack: number[] = [];
+type Entry = { id: number; close: () => void };
+
+const stack: Entry[] = [];
 let seq = 0;
+let guardId = 0; // id of OUR history entry while it is there, else 0
+let removing = false; // a history.back() of ours is in flight
+let syncTimer = 0;
+
+const stateOf = () => window.history.state as { __guard?: number } | null;
+
+function sync() {
+  window.clearTimeout(syncTimer);
+  syncTimer = window.setTimeout(() => {
+    if (removing) return; // finished in onPop
+    if (stack.length > 0 && !guardId) {
+      guardId = ++seq;
+      window.history.pushState({ ...(stateOf() ?? {}), __guard: guardId }, '');
+    } else if (stack.length === 0 && guardId) {
+      if (stateOf()?.__guard === guardId) {
+        removing = true;
+        window.history.back();
+      } else {
+        guardId = 0; // a navigation already replaced / moved past it
+      }
+    }
+  }, 30);
+}
+
+function onPop() {
+  if (removing) {
+    // Our own history.back() landed.
+    removing = false;
+    guardId = 0;
+    sync();
+    return;
+  }
+  if (!guardId || stateOf()?.__guard === guardId) return;
+  // The user pressed Back: the guard is gone, close the top window.
+  guardId = 0;
+  const top = stack[stack.length - 1];
+  try {
+    top?.close();
+  } finally {
+    sync(); // still a window open (stacked, or close refused) → guard again
+  }
+}
+
+let listening = false;
 
 export function useBackClose(open: boolean, onClose: () => void) {
   const closeRef = useRef(onClose);
@@ -19,34 +71,17 @@ export function useBackClose(open: boolean, onClose: () => void) {
 
   useEffect(() => {
     if (!open) return;
-    const id = ++seq;
-    let pushed = false;
-    let poppedByBack = false;
-
-    const onPop = () => {
-      if (!pushed || stack[stack.length - 1] !== id) return; // only the top window
-      if ((window.history.state as { __overlay?: number } | null)?.__overlay === id) return;
-      stack.pop();
-      poppedByBack = true;
-      closeRef.current();
-    };
-
-    // Deferred so React StrictMode's mount → unmount → mount (dev) never pushes twice.
-    const timer = window.setTimeout(() => {
-      window.history.pushState({ ...(window.history.state ?? {}), __overlay: id }, '');
-      stack.push(id);
-      pushed = true;
+    if (!listening) {
       window.addEventListener('popstate', onPop);
-    }, 0);
-
+      listening = true;
+    }
+    const entry: Entry = { id: ++seq, close: () => closeRef.current() };
+    stack.push(entry);
+    sync();
     return () => {
-      window.clearTimeout(timer);
-      window.removeEventListener('popstate', onPop);
-      if (!pushed || poppedByBack) return;
-      const i = stack.indexOf(id);
+      const i = stack.indexOf(entry);
       if (i >= 0) stack.splice(i, 1);
-      // Closed by the UI: drop our entry, unless a navigation already moved past it.
-      if ((window.history.state as { __overlay?: number } | null)?.__overlay === id) window.history.back();
+      sync();
     };
   }, [open]);
 }

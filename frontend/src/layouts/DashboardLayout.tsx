@@ -1,4 +1,4 @@
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { ConnectionStatus } from '../components/ConnectionStatus';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
@@ -45,6 +45,7 @@ import type { AuthUser, ModuleKey, Site } from '../types';
 import { hasModule, isHseRole } from '../utils/modules';
 import { Brand } from '../components/ui/Brand';
 import { useBackClose } from '../hooks/useBackClose';
+import { useSiteParams } from '../hooks/useSiteParams';
 
 function dropdownOptionClass(active: boolean) {
   return clsx(
@@ -153,6 +154,23 @@ export function DashboardLayout() {
 
   // Back closes the phone drawer (only below lg, where it is an overlay).
   useBackClose(mobileOpen && !!window.matchMedia?.('(max-width: 1023px)').matches, () => setMobileOpen(false));
+
+  // Field work without network: while online, put on the phone what the
+  // pompiste screens need (citernes, vehicles of each citerne) even before
+  // those pages are opened — the service worker keeps these answers.
+  const siteParams = useSiteParams();
+  const warmKey = JSON.stringify([user?.id, siteParams]);
+  useEffect(() => {
+    if (!user) return;
+    const quiet = () => undefined;
+    if (hasModule(user, 'bons'))
+      api
+        .get<{ id: number }[]>('/bons/tanks', { params: siteParams })
+        .then((r) => r.data.forEach((t) => api.get('/bons/vehicles', { params: { fuel_tank_id: t.id } }).catch(quiet)))
+        .catch(quiet);
+    if (hasModule(user, 'entrees_carburant')) api.get('/entrees/tanks', { params: siteParams }).catch(quiet);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [warmKey]);
 
   function toggleSidebar() {
     setMobileOpen((o) => !o);

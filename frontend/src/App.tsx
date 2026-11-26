@@ -10,6 +10,7 @@ import { hasModule, homePath } from './utils/modules';
 import type { ModuleKey } from './types';
 import { lazyPage, preloadPages } from './utils/lazyPage';
 import LoginPage from './pages/LoginPage';
+import { startOfflinePendingSync } from './utils/offlinePending';
 const BonsPage = lazyPage(() => import('./pages/BonsPage'));
 const EntreesCarburantPage = lazyPage(() => import('./pages/EntreesCarburantPage'));
 const DashboardPage = lazyPage(() => import('./pages/DashboardPage'));
@@ -37,7 +38,18 @@ const AffectationMaterielPage = lazyPage(() => import('./pages/AffectationMateri
 const DetailCiternesPage = lazyPage(() => import('./pages/DetailCiternesPage'));
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 1, staleTime: 10_000 } },
+  // networkMode 'always': never pause a request because the browser says
+  // "offline" — the service worker answers it (saved copy for a read, the
+  // offline queue for a write). With the default ('online') a bon saved with
+  // no network stayed "Enregistrement…" forever and never reached the queue.
+  defaultOptions: { queries: { retry: 1, staleTime: 10_000, networkMode: 'always' }, mutations: { networkMode: 'always' } },
+});
+
+// A bon / livraison saved offline was sent (or refused): refresh those lists.
+startOfflinePendingSync(() => {
+  queryClient.invalidateQueries({ queryKey: ['bons'] });
+  queryClient.invalidateQueries({ queryKey: ['entrees'] });
+  queryClient.invalidateQueries({ queryKey: ['fuel'] });
 });
 
 function RequireAuth({ children }: { children: React.ReactNode }) {

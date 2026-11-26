@@ -265,27 +265,46 @@ class FuelBonController extends Controller
 
     /** The same paper bon can't be typed twice on one citerne (nor re-typed over an imported line). */
     /**
-     * The n° the next bon most likely carries: the paper bons are numbered in
-     * sequence, so it is the highest n° among the citerne's latest sorties
-     * + 1, written like them (leading zeros kept: 0075951 → 0075952), and
-     * never one already used on the citerne in the last BON_WINDOW_DAYS (carnets are reused). Only a suggestion: the
-     * pompiste can type another n° (a new carnet, a skipped bon).
+     * The n° the next bon most likely carries, written like it (leading zeros
+     * kept: 0075951 → 0075952), never one already used on the citerne in the
+     * last BON_WINDOW_DAYS (carnets are reused). Only a suggestion: the
+     * pompiste can always type another n°.
+     *
+     * It FOLLOWS WHAT THE POMPISTE TYPED (user's rule, 2026-11-26): pre-filled
+     * 75976, he types 79150 (a new carnet) → the next ones are 79151, 79152…
+     * So the base is the n° of the bon typed LAST in the app on this citerne
+     * (by entry order), when it is at least as recent as the citerne's other
+     * lines; otherwise (no bon typed yet, or the Excel is newer) the highest
+     * n° among the citerne's latest sorties.
      *
      * @return array{last_bon: ?string, next_bon: ?string}
      */
     protected function nextBon(int $tankId): array
     {
-        $recent = DB::table('fuel_movements')
+        $isNumber = fn ($n) => preg_match('/^\d{1,15}$/', $n) === 1;
+        $latestDate = DB::table('fuel_movements')
             ->where('fuel_tank_id', $tankId)->where('type', 'exit')->whereNotNull('bon_number')
-            ->orderByDesc('date')->orderByDesc('serie_end')->orderByDesc('id')
-            ->limit(30)->pluck('bon_number')
-            ->map(fn ($n) => trim((string) $n))
-            ->filter(fn ($n) => preg_match('/^\d{1,15}$/', $n));
-        if ($recent->isEmpty()) {
-            return ['last_bon' => null, 'next_bon' => null];
-        }
+            ->max('date');
+        $typed = DB::table('fuel_movements')
+            ->where('fuel_tank_id', $tankId)->where('type', 'exit')->where('origin', 'bon')->whereNotNull('bon_number')
+            ->orderByDesc('id')
+            ->first(['bon_number', 'date']);
+        $typedNumber = $typed ? trim((string) $typed->bon_number) : null;
 
-        $last = $recent->sortByDesc(fn ($n) => (int) $n)->first();
+        if ($typedNumber !== null && $isNumber($typedNumber) && $typed->date >= $latestDate) {
+            $last = $typedNumber;
+        } else {
+            $recent = DB::table('fuel_movements')
+                ->where('fuel_tank_id', $tankId)->where('type', 'exit')->whereNotNull('bon_number')
+                ->orderByDesc('date')->orderByDesc('serie_end')->orderByDesc('id')
+                ->limit(30)->pluck('bon_number')
+                ->map(fn ($n) => trim((string) $n))
+                ->filter($isNumber);
+            if ($recent->isEmpty()) {
+                return ['last_bon' => null, 'next_bon' => null];
+            }
+            $last = $recent->sortByDesc(fn ($n) => (int) $n)->first();
+        }
         $width = strlen($last);
         $used = DB::table('fuel_movements')
             ->where('fuel_tank_id', $tankId)->where('type', 'exit')->whereNotNull('bon_number')
@@ -407,14 +426,25 @@ class FuelBonController extends Controller
 
     protected function lastSerie(int $tankId): ?float
     {
-        $value = DB::table('fuel_movements')
+        $latest = DB::table('fuel_movements')
             ->where('fuel_tank_id', $tankId)
             ->whereNotNull('serie_end')
             // By date then pump index: a re-import gives the Excel lines higher ids than the bons typed before it.
             ->orderByDesc('date')->orderByDesc('serie_end')
-            ->value('serie_end');
+            ->first(['serie_end', 'date']);
+        // What the pompiste typed last wins when it is the most recent day (user's
+        // rule, 2026-11-26): he corrected the série départ → the next bon follows
+        // HIS série fin, even if an older line of that day had a higher one.
+        $typed = DB::table('fuel_movements')
+            ->where('fuel_tank_id', $tankId)->where('origin', 'bon')
+            ->whereNotNull('serie_end')
+            ->orderByDesc('id')
+            ->first(['serie_end', 'date']);
+        if ($typed && (! $latest || $typed->date >= $latest->date)) {
+            return (float) $typed->serie_end;
+        }
 
-        return $value === null ? null : (float) $value;
+        return $latest ? (float) $latest->serie_end : null;
     }
 
     protected function litres(FuelMovement $bon): string
